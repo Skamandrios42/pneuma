@@ -1,0 +1,10 @@
+.bloop
+.bsp
+sbt.json
+.metals
+.vscode
+project/project
+project/.bloop
+project/target
+project/metals.sbt
+target
