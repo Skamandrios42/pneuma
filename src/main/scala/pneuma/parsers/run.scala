@@ -23,9 +23,9 @@ def run(): Unit =
         world <- str("World!")
     yield s"$hello $world"
 
-    println(str("A").rep(""))
+    println(str("A").repeat(""))
     println((str("a") or str("b"))(""))
-    println(((str("a") or str("b")) <*> str("c")).rep("acbcbcaca"))
+    println(((str("a") or str("b")) <*> str("c")).repeat("acbcbcaca"))
 
     println(myParser("Hello World! more text"))
     println(myParser("Hello    World!"))

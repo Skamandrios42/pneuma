@@ -11,7 +11,9 @@ class Tests extends AnyFunSuite:
 
     type DoubleParser = Parser[(String, Int), StringError, Double]
 
-    def literal: DoubleParser = ("(" *> term.spaced <* ")") priorizedOr ("-?[0-9]+(\\.[0-9]+)?".r.map(_.toDouble))
+    def number: DoubleParser = "-?[0-9]+(\\.[0-9]+)?".r.transform(_.toDouble, _.copy(expected = "number"))
+
+    def literal: DoubleParser = "(" *> term.spaced <* ")" or number
 
     def factor: DoubleParser = literal.foldsep(("*" or "/").spaced) {
         case (a, op, b) => if op == "*" then a * b else a / b
