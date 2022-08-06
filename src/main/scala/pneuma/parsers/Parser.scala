@@ -5,20 +5,22 @@ import Parser.Result
 
 object Parser {
 
-    enum Result[+E, +A]:
+    enum Result[+E, +A] {
         case Success(value: A)
         case Failure(value: E)
+    }
 
     def from[S, A](f: S => (A, S)): Parser[S, Nothing, A] = (src0: S) =>
-      val (result, src1) = f(src0)
-      (Success(result), src1)
+        val (result, src1) = f(src0)
+        (Success(result), src1)
 
     def apply[S] = new Creator[S]
 
-    class Creator[S]:
-      def success[A](value: => A): Parser[S, Nothing, A] = (src: S) => (Success(value), src)
-      def failure[E](value: => E): Parser[S, E, Nothing] = (src: S) => (Failure(value), src)
-      def result[E, A](value: => Result[E, A]): Parser[S, E, A] = (src: S) => (value, src)
+    class Creator[S] {
+        def success[A](value: => A): Parser[S, Nothing, A] = (src: S) => (Success(value), src)
+        def failure[E](value: => E): Parser[S, E, Nothing] = (src: S) => (Failure(value), src)
+        def result[E, A](value: => Result[E, A]): Parser[S, E, A] = (src: S) => (value, src)
+    }
 
 }
 
@@ -59,6 +61,14 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
             tail <- rep
         yield head :: tail) or Parser[S].success(List.empty)
 
+    def alternating[F, B](that: Parser[S, F, B]): Parser[S, F, List[(A, B)]] =
+        this(_) match
+            case (Success(a), src) => (
+                for b    <- that
+                    rest <- this alternating that
+                yield (a, b) :: rest)(src)
+            case (Failure(e), src) => (Success(List.empty), src)
+
     def fold[A1 >: A](op: (A1, A1) => A1): Parser[S, E, A1] =
         for head <- this
             tail <- this.rep
@@ -66,7 +76,9 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
 
     def foldsep[F, B, A1 >: A](that: Parser[S, F, B])(op: (A1, B, A1) => A1): Parser[S, E, A1] =
         for head <- this
-            tail <- (that <*> this).rep
+            tail <- that alternating this
         yield tail.foldLeft[A1](head) { case (a0, (b, a1)) => op(a0, b, a1)}
+
+    // imperative foldsep
 
 }
