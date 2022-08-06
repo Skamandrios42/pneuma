@@ -9,9 +9,9 @@ class Tests extends AnyFunSuite:
 
     import StringParsers.{*, given}
 
-    type DoubleParser = Parser[String, StringError, Double]
+    type DoubleParser = Parser[(String, Int), StringError, Double]
 
-    def literal: DoubleParser = "(" *> term.spaced <* ")" or ("-?[0-9]+(\\.[0-9]+)?".r.map(_.toDouble))
+    def literal: DoubleParser = ("(" *> term.spaced <* ")") priorizedOr ("-?[0-9]+(\\.[0-9]+)?".r.map(_.toDouble))
 
     def factor: DoubleParser = literal.foldsep(("*" or "/").spaced) {
         case (a, op, b) => if op == "*" then a * b else a / b
@@ -21,16 +21,15 @@ class Tests extends AnyFunSuite:
         case (a, op, b) => if op == "+" then a + b else a - b
     }
 
-    def parse = term.spaced
+    def parse = term.spaced(_: String, 0)
     def debug = parse(_: String) match
         case (Success(value), _) => println(value)
         case (Failure(error), _) => println(error)
 
     test("error messages") {
-        println(("H" <*> "E")("Hello World!"))
+        println(("H" <*> "E")("Hello World!", 0))
         debug("2 +")
-        debug("3 2")
-        debug("3 * (2 + 2")
+        debug("3 * (2 + 2]")
     }
 
     test("arithmetic parser") {

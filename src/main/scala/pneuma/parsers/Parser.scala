@@ -8,6 +8,10 @@ object Parser {
     enum Result[+E, +A] {
         case Success(value: A)
         case Failure(value: E)
+
+        def onFailure[F, B](f: E => Result[F, B]) = this match
+            case Success(value) => Success(value)
+            case Failure(value) => f(value)
     }
 
     def from[S, A](f: S => (A, S)): Parser[S, Nothing, A] = (src0: S) =>
@@ -55,6 +59,20 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
         this(src) match
             case (Success(value), src) => (Success(value), src)
             case (Failure(value), _)   => that(src)
+
+    def priorizedOr[E1 >: E, F, B](that: => Parser[S, F, B])(using order: Ordering[E1 | F]): Parser[S, E | F, A | B] = (src: S) =>
+        this(src) match
+            case (Success(value), src1) => (Success(value), src1)
+            case (Failure(e), src1)   => that(src) match
+                case (Success(value), src2) => (Success(value), src2)
+                case (Failure(f), src2)   => if order.gt(e, f) then (Failure(e), src1) else (Failure(f), src1)
+        // val (res1, src1) = this(src0)
+        // (res1.onFailure(e => 
+        //     val (res2, src2) = that(src0)
+        //     res2.onFailure(f =>
+        //         Failure(order.max(e, f))
+        //     )
+        // ), src1)
 
     def rep: Parser[S, Nothing, List[A]] = (
         for head <- this
