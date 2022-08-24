@@ -5,8 +5,7 @@ import Parser.Result
 import scala.util.matching.Regex
 import languageFeature.implicitConversions
 
-object StringParsers:
-
+object StringParsers {
     given Ordering[StringError] with
         def compare(a: StringError, b: StringError) = a.pos compare b.pos
 
@@ -31,4 +30,4 @@ object StringParsers:
 
     extension [E, A](self: Parser[(String, Int), E, A]) def spaced = skip *> self <* skip
 
-end StringParsers
+}

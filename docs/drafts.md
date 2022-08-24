@@ -2,6 +2,8 @@
 --------------------------
 
 ## Grammar
+
+#### first draft
 ```haskell
 t = x               -- variable
     x -> t          -- function
@@ -18,7 +20,7 @@ t = x               -- variable
     t #t            -- implicit application
 ```
 
-## Modified Grammar
+#### modified grammar
 
 ```haskell
 x = <identifier>
@@ -36,6 +38,7 @@ t = x                           -- variable
 
     "{" { "[" p "]" "->" t  } "}" -- inferred function
     "[" x ":" t "]" "=>" t        -- inferred function type
+    t "[" t "]"                   -- inferred function application
 
     -- TODO must be refined
     "data" x ":" t "{" { x ":" t } "}" -- inductive type
@@ -45,12 +48,20 @@ t = x                           -- variable
 
 ```
 
+#### inductive data type grammar
+
+```
+c = x ":" [inferred] => (fields) <=> type
+t = "data" x ":" t "{" { c } "}"
+```
 
 ## Problems
 
-- [ ] inductive types and pattern matching in modules
+- [x] inductive types and pattern matching in modules
 - [x] existential types in modules
 - [x] problem with term level (mis)use
+
+- [ ] check patterns using 
 
 ## Playground
 
@@ -87,7 +98,7 @@ usage : Nat
 usage = package (n -> mod.n + 2 )
 ```
 
-### existentials via modules
+#### existentials via modules
 
 ```
 package : [Y] => ({ C : Type, put : Nat => C, get : C => Nat } => Y) => Y
@@ -116,7 +127,7 @@ main =
 
 ```
 
-## inductive data types
+#### inductive data types
 
 ```
 data Nat : Type {
@@ -147,6 +158,12 @@ f : Nat => Nat
 f = {
     Z   -> "Z"
     S n -> "S" ++ f n
+}
+
+concat : [A, n, m] => Vect A n => Vect A m => Vect A (n + m)
+concat = {
+    Nil       -> xs -> xs
+    Cons a as -> xs -> Cons a (concat as xs)
 }
 ```
 
