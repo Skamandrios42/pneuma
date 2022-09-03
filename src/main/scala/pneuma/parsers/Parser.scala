@@ -8,6 +8,16 @@ object Parser {
     enum Result[+E, +A] {
         case Success(value: A)
         case Failure(value: E)
+        def map[B](f: A => B): Result[E, B] = this match
+            case Success(value) => Success(f(value))
+            case Failure(value) => Failure(value)
+        def flatMap[B, F](f: A => Result[F, B]): Result[E | F, B]  = this match
+            case Success(value) => f(value)
+            case Failure(value) => Failure(value)
+        def foreach[B](f: A => Unit): Unit = this match
+            case Success(value) => f(value)
+            case _ =>
+        
     }
 
     def from[S, A](f: S => (A, S)): Parser[S, Nothing, A] = src0 =>
