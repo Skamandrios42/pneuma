@@ -1,13 +1,13 @@
-package pneuma.generation.lambdacalculus
+package lambdacalculus
 
-import pneuma.generation.lambdacalculus.Term.Abs
-import pneuma.generation.lambdacalculus.Term.App
-import pneuma.generation.lambdacalculus.Term.Print
-import pneuma.generation.lambdacalculus.Term.Str
-import pneuma.generation.lambdacalculus.Term.Var
-import pneuma.parsers.Parser
-import pneuma.parsers.Parser.Result
-import pneuma.parsers.StringParsers
+import lambdacalculus.Term.Abs
+import lambdacalculus.Term.App
+import lambdacalculus.Term.Print
+import lambdacalculus.Term.Str
+import lambdacalculus.Term.Var
+import parsing.Parser
+import parsing.Parser.Result
+import parsing.StringParsers
 
 import scala.language.implicitConversions
 

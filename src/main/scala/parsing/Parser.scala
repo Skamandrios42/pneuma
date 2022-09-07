@@ -1,4 +1,4 @@
-package pneuma.parsers
+package parsing
 
 import Parser.Result.{Success, Failure}
 import Parser.Result

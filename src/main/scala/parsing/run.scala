@@ -1,4 +1,4 @@
-package pneuma.parsers
+package parsing
 
 import scala.util.matching.Regex
 import Parser.Result.{Success, Failure}

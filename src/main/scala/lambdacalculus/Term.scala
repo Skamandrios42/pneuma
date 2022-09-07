@@ -1,4 +1,4 @@
-package pneuma.generation.lambdacalculus
+package lambdacalculus
 
 import scala.sys.process.Process
 

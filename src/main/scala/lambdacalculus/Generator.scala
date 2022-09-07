@@ -1,4 +1,4 @@
-package pneuma.generation.lambdacalculus
+package lambdacalculus
 
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Handle
