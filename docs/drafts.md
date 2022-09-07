@@ -23,8 +23,9 @@ t = x               -- variable
 #### modified grammar
 
 ```haskell
-x = <identifier>
-p = x { p }
+x = <identifier>  -- variables
+p = x { p }       -- patterns
+c = x ":" "[" t "]" "<" { t } ">" "<" { t } ">" -- constructors
 
 t = x                           -- variable
 
@@ -40,11 +41,10 @@ t = x                           -- variable
     "[" x ":" t "]" "=>" t        -- inferred function type
     t "[" t "]"                   -- inferred function application
 
-    -- TODO must be refined
-    "data" x ":" t "{" { x ":" t } "}" -- inductive type
-
     "{" { x "=" t | "#" t "=" t } "}"  -- module term with implicits
     "{" { x ":" t | "#" t } "}"        -- module type with implicits
+
+    "data" x "<" { t } ">" "{" { c } "}" -- inductive type
 
 ```
 
@@ -55,15 +55,55 @@ c = x ":" [inferred] => (fields) <=> type
 t = "data" x ":" t "{" { c } "}"
 ```
 
+```
+data name : <index types> = {
+    name : [inner constraints] <index terms> <fields>
+}
+```
+
+## tasks
+
+- type-checking. 
+- infer type parameters. are resolved during type-checking by comparing 
+- infer implicits. are resolved during type-checking by accessing proof space
+
 ## Problems
 
 - [x] inductive types and pattern matching in modules
 - [x] existential types in modules
-- [x] problem with term level (mis)use
-
-- [ ] check patterns using 
+- [x] problem with term level (mis)use 
 
 ## Playground
+
+#### inferred types
+
+```
+
+f : [A : Type] => A => A
+f x = x
+
+f 3 == f [Int] 3 == 3
+
+```
+
+#### implicits
+
+```haskell
+#Int = 3
+
+f : #Int => Int
+f = #x -> x * 2
+
+-- should both a and b type-check?
+a : Int
+a = f
+
+b : #Int => Int
+b = f
+
+```
+
+#### existentials
 
 ```
 hidden = {
@@ -187,4 +227,16 @@ Nat = ind_type[] {
     @pattern ind_term["Z"] = ()
     @pattern ind_term["S", n] = (n)
 }
+```
+
+```
+-- sorted list of natural numbers
+data SList : Nat => Type =
+    Nil : SList 0
+    Cons : [n: Nat, m: Nat] => #(n > m) => n => SList m => SList n
+
+f : [n: Nat] => SList n
+f xs = xs match
+    Nil -> ??
+    Cons n ns => ??   -- has proof of n > m in scope
 ```
