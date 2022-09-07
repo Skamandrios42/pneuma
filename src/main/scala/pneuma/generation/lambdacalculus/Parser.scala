@@ -1,11 +1,15 @@
 package pneuma.generation.lambdacalculus
 
-import scala.language.implicitConversions
-
-import pneuma.parsers.StringParsers
+import pneuma.generation.lambdacalculus.Term.Abs
+import pneuma.generation.lambdacalculus.Term.App
+import pneuma.generation.lambdacalculus.Term.Print
+import pneuma.generation.lambdacalculus.Term.Str
+import pneuma.generation.lambdacalculus.Term.Var
 import pneuma.parsers.Parser
 import pneuma.parsers.Parser.Result
-import pneuma.generation.lambdacalculus.Term.{Var, Abs, App, Str, Print}
+import pneuma.parsers.StringParsers
+
+import scala.language.implicitConversions
 
 object Parser {
 
@@ -14,14 +18,14 @@ object Parser {
     type LParser = Parser[(String, Int), StringError, Term]
 
     val ident = regex("[_a-zA-Z][_a-zA-Z0-9]*".r).transform(identity, _.copy(expected = "identifier"))
-    
+
     val string = regex("\"([^\"\\\\]|\\\\[\\s\\S])*\"".r).transform(
         str => Str(str.substring(1, str.length - 1)), 
         err => err.copy(expected = "string-literal")
     )
 
     val variable = ident.map(Var(_)) or ("(" *> application.spaced <* ")")
-    
+
     val abstraction = for 
         _    <- str("\\")
         x    <- ident.spaced

@@ -10,17 +10,16 @@ enum Term {
   case Print(t: Term)
 
   override def toString = this match
-    case Var(x) => x
-    case Abs(x, body) => s"(\\$x.$body)"
+    case Var(x)        => x
+    case Abs(x, body)  => s"(\\$x.$body)"
     case App(abs, arg) => s"($abs $arg)"
-    case Str(value) => s"\"$value\""
-    case Print(t) => s"(print t)"
+    case Str(value)    => s"\"$value\""
+    case Print(t)      => s"(print $t)"
 }
-
-
 @main 
 def test() =
-  val input = """print ( (\x . \y . y) "True" "False" )"""
+  val input = """(\msg . print ( (\f . \x . f (f (f x))) (\a . print a) msg ) ) "Hey" """
   for term <- Parser(input) do
+    println(term)
     Generator("Calculus", term)
   println(Process("java Calculus").run().exitValue())

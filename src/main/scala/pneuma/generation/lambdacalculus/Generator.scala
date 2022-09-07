@@ -1,17 +1,17 @@
 package pneuma.generation.lambdacalculus
 
 import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Handle
+import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes.*
+import org.objectweb.asm.Type
+
+import java.lang.invoke.CallSite
+import java.lang.invoke.MethodHandle
+import java.lang.invoke.MethodHandles
+import java.lang.invoke.MethodType
 import java.nio.file.Files
 import java.nio.file.Paths
-import org.objectweb.asm.MethodVisitor
-import java.util.UUID
-import java.lang.invoke.MethodType
-import java.lang.invoke.CallSite
-import java.lang.invoke.MethodHandles
-import java.lang.invoke.MethodHandle
-import org.objectweb.asm.Handle
-import org.objectweb.asm.Type
 
 object Generator {
 
@@ -20,7 +20,7 @@ object Generator {
         writer.visit(V1_8, ACC_PUBLIC, name, null, "java/lang/Object", null)
         val visitor = writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null)
         visitor.visitCode()
-        generate(name, writer, visitor, term, Nil, Namer("anon_"))
+        generate(name, writer, visitor, term, Nil, Namer("anon$"))
         visitor.visitInsn(RETURN)
         visitor.visitMaxs(0, 0)
         visitor.visitEnd()
@@ -56,12 +56,15 @@ object Generator {
             generate(name, cw, mv, arg, context, names) // put `arg` on the stack
             mv.visitMethodInsn(INVOKEINTERFACE, "java/util/function/Function", "apply", funDescriptor, true)
         case Term.Str(value) =>
+            // puts constant on the stack
             mv.visitLdcInsn(value)
         case Term.Print(t) =>
+            // get out field and evaluate `t`
             mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
             generate(name, cw, mv, t, context, names)
             mv.visitVarInsn(ASTORE, context.length)
             mv.visitVarInsn(ALOAD, context.length)
+            // print `t` and put it on stack afterwards
             mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
             mv.visitVarInsn(ALOAD, context.length)
 
