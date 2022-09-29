@@ -56,6 +56,7 @@ def defineMethod(visitor: MethodVisitor)(code: MethodVisitor => Unit) =
         }
 
     }
+    println("done!")
 
 def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Unit) = {
     mv.visitTypeInsn(NEW, name)
@@ -186,9 +187,39 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
     mv.visitEnd()
     cw.visitEnd()
 
-
-
     Files.write(Paths.get("Dynamic.class"), cw.toByteArray)
+
+@main def generateNoCast(): Unit =
+    val writer = new ClassWriter(ClassWriter.COMPUTE_MAXS)
+    writer.visit(V1_8, ACC_PUBLIC, "NoCast", null, "java/lang/Object", null)
+    
+    val print = writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "print", "(Ljava/lang/Object;)V", null, null)
+    print.visitCode()
+    print.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
+    print.visitVarInsn(ALOAD, 0)
+    print.visitIntInsn(BIPUSH, 2)
+    print.visitMethodInsn(INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true)
+    print.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
+    print.visitInsn(RETURN)
+    print.visitMaxs(0, 0)
+    print.visitEnd()
+
+    val mv = writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null)
+    mv.visitCode()
+    mv.visitLdcInsn("0 Hello world!")
+    mv.visitLdcInsn("1 Hello world!")
+    mv.visitLdcInsn("2 Hello world!")
+    mv.visitMethodInsn(INVOKESTATIC, "java/util/List", "of", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/List;", true)
+    mv.visitMethodInsn(INVOKESTATIC, "NoCast", "print", "(Ljava/lang/Object;)V", false)
+    mv.visitInsn(RETURN)
+    mv.visitMaxs(0, 0)
+    mv.visitEnd()
+
+    writer.visitEnd()
+
+    Files.write(Paths.get("NoCast.class"), writer.toByteArray)
+    println("Done!")
+
 
 @main def generateLambda(): Unit =
 
