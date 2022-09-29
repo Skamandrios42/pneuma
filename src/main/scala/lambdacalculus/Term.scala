@@ -16,10 +16,10 @@ enum Term {
     case Str(value)    => s"\"$value\""
     case Print(t)      => s"(print $t)"
 }
-@main 
+@main
 def test() =
   val input = """(\msg . print ( (\f . \x . f (f (f x))) (\a . print a) msg ) ) "Hey" """
   for term <- Parser(input) do
     println(term)
     Generator("Calculus", term)
-  println(Process("java Calculus").run().exitValue())
+    println(Process("java Calculus").run().exitValue())
