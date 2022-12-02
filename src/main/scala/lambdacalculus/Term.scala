@@ -16,9 +16,12 @@ enum Term {
     case Str(value)    => s"\"$value\""
     case Print(t)      => s"(print $t)"
 }
+
 @main
 def test() =
   val input = """(\msg . print ( (\f . \x . f (f (f x))) (\a . print a) msg ) ) "Hey" """
+  val ωω = """(\x . x x) (\x . x x)"""
+  val ff = """(\f . (\x . f (x x)) (\x . f (x x)))"""
   for term <- Parser(input) do
     println(term)
     Generator("Calculus", term)

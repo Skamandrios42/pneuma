@@ -33,13 +33,6 @@ extension (cw: ClassWriter)
         mv.visitMaxs(0, 0)
         mv.visitEnd()
 
-// mv.visitInvokeDynamicInsn(
-//                 "apply", s"(${"Ljava/lang/Object;" * context.size})Ljava/util/function/Function;", bootstrap,
-//                 Type.getType(funDescriptor),
-//                 Handle(H_INVOKESTATIC, name, anon, sig, false),
-//                 Type.getType(funDescriptor)
-//             )
-
 extension (mv: MethodVisitor)
     def mkLambda(nameOfSAM: String, descriptorOfDynamicCall: String, implementation: Handle) =
 

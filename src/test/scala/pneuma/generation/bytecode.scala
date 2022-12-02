@@ -33,7 +33,7 @@ def defineMethod(visitor: MethodVisitor)(code: MethodVisitor => Unit) =
 @main def generateEcho: Unit =
 
     defineClass("Echo", "java/lang/Object", saving = true) { cw =>
-        
+
         defineMethod(cw.visitMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null)) { mv =>
             // put `System.out` on the stack
             mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
@@ -149,7 +149,7 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
     Files.write(Paths.get("Echo.class"), cw.toByteArray)
 
 
-@main def generate(): Unit = 
+@main def generate(): Unit =
 
     // val scanner = new Scanner(System.in);
     // System.out.println(scanner.nextLine());
@@ -157,7 +157,7 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
     val writer = new ClassWriter(ClassWriter.COMPUTE_MAXS)
     writer.visit(V1_8, ACC_PUBLIC, "GeneratedClass", null, "java/lang/Object", null)
     val visitor = writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null)
-    
+
     visitor.visitCode()
     visitor.visitLdcInsn("Hello world!")
     visitor.visitVarInsn(ASTORE, 0)
@@ -172,7 +172,7 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
     Files.write(Paths.get("GeneratedClass.class"), writer.toByteArray)
 
 @main def generateDynamic(): Unit =
-    
+
     val cw = new ClassWriter(ClassWriter.COMPUTE_MAXS)
     cw.visit(V1_8, ACC_PUBLIC, "Dynamic", null, "java/lang/Object", null)
 
@@ -192,7 +192,7 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
 @main def generateNoCast(): Unit =
     val writer = new ClassWriter(ClassWriter.COMPUTE_MAXS)
     writer.visit(V1_8, ACC_PUBLIC, "NoCast", null, "java/lang/Object", null)
-    
+
     val print = writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "print", "(Ljava/lang/Object;)V", null, null)
     print.visitCode()
     print.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
@@ -239,7 +239,7 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
 
     // main method
     val mv = cw.visitMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null)
-    
+
     mv.visitCode()
     mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
 
@@ -247,9 +247,9 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
 
     // type of the bootstrap method
     val mt = MethodType.methodType(
-        classOf[CallSite], 
-        classOf[MethodHandles.Lookup], 
-        classOf[String], 
+        classOf[CallSite],
+        classOf[MethodHandles.Lookup],
+        classOf[String],
         classOf[MethodType],
         classOf[MethodType],
         classOf[MethodHandle],
@@ -260,14 +260,14 @@ def init(mv: MethodVisitor, name: String, descriptor: String)(argsOnStack: => Un
 
     // define metafactory as the bootstrap-method
     val bootstrap = new Handle(
-        H_INVOKESTATIC, 
-        "java/lang/invoke/LambdaMetafactory", "metafactory", 
+        H_INVOKESTATIC,
+        "java/lang/invoke/LambdaMetafactory", "metafactory",
         mt.toMethodDescriptorString, false
     )
-    
+
     // create lambda object on stack
     mv.visitInvokeDynamicInsn(
-        "apply", "()Ljava/util/function/Function;", bootstrap, 
+        "apply", "()Ljava/util/function/Function;", bootstrap,
         Type.getType("(Ljava/lang/Object;)Ljava/lang/Object;"),
         new Handle(H_INVOKESTATIC, "Lambda", "add", "(I)I", false),
         Type.getType("(Ljava/lang/Integer;)Ljava/lang/Integer;")

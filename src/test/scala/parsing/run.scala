@@ -6,7 +6,7 @@ import scala.io.StdIn
 
 @main
 def run(): Unit =
-    
+
     def str(s: String): Parser[String, Unit, String] =
         (src: String) => if src.startsWith(s)
             then (Success(s), src.drop(s.length))

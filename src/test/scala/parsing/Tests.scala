@@ -10,7 +10,7 @@ class Tests extends AnyFunSuite:
     import StringParsers.{*, given}
 
     type DoubleParser = Parser[(String, Int), StringError, Double]
-    
+
     val number  = "-?[0-9]+(\\.[0-9]+)?".r.transform(_.toDouble, _.copy(expected = "number"))
 
     val literal = "(" *> term.spaced <* ")" or number
