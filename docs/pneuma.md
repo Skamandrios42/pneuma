@@ -3,7 +3,9 @@
 ## Roadmap
 
 - pneuma.proto — COC + modules and implicits
-- pneuma.core — proto.pneuma + type-inference + IDTs
+    - ordered modules ($\rightarrow$ clear type-checking and evaluation order)
+    - unordered modules ($\rightarrow$ order must be inferred)
+- pneuma.core — proto.pneuma + type-inference + IDTs ((==)-policy)
 - pneuma.basic — pneuma.core + standard-types + extensibilty
 
 ---
@@ -106,3 +108,75 @@ type mismatch (A? => B) found, but expected B -> search(A, G)
 
 search(A, G, a : A)  --> a
 search(A, G, b : C? => A)  --> b search(C, G)
+
+
+### how to typecheck modules
+
+```haskell
+:term {
+    X = A -> A,
+    y = 42,
+    z = y : this.X Int
+}
+
+:type {
+    X : Type => Type,
+    Y : this.X Int,
+    Z : Int
+}
+
+{
+    X = A -> A          :: Type => Type
+    y = 42              :: this.X Int,
+    z = y : this.X Int  :: Int
+}
+
+{
+    X = A :: Type -> A :: Type
+    y = 42 :: Int <=> (A -> A) Int,
+    z = y : this.X Int  :: Int
+}
+
+```
+
+### modules with implicits
+
+```haskell
+:term {
+    X = ?,          ~> A -> A :: (#Type => Type)
+    y = 42,         ~> 42 :: Int === (A -> A) Int
+    z = y : this.X  ~> 42 :: Int === (A -> A) Int
+    # Type = Int    ~> Int :: Type
+}
+
+:type {
+    X : #(Type) => Type,  ~> #(Type) => Type :: Type
+    Y : this.X,           ~> this.X #Type  :: Type
+    Z : Int,              ~> Int :: Type
+    # Type                ~> Type :: Type
+}
+```
+
+#### basic case
+
+```python
+{ ?T = t0,
+  y = ?,
+  z = y }
+
+{ ?T,
+  y : ?T => T
+  z : T }
+
+{ x = t0,
+  y = a -> a,
+  z = y x }
+```
+
+#### type level I
+
+```python
+{ ?* = T, y = t0 }
+
+{ ?*, y : ?}
+```

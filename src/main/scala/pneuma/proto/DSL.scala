@@ -8,7 +8,7 @@ object DSL {
     given Conversion[Int, Term.Var] = Term.Var(_)
     val ? = Term.Phi
     val * = Term.Typ
-    val -- = Term.Empty
+
     extension (self: Term) {
         def apply(term: Term) = Term.App(self, term)
         def at(term: Term) = Term.App(self, term)

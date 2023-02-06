@@ -13,7 +13,6 @@ enum Term {
     case Mod(fields: Map[String, Term], implicits: Map[Term, Term])
     case Interface(fields: Map[String, Term], implicits: Set[Term])
     case Get(t: Term, field: String)
-    case Empty
     case As(te: Term, ty: Term)
 
     override def toString: String = this match
@@ -33,7 +32,6 @@ enum Term {
             val implicitsStr = implicits map { t => s"φ : $t" } mkString ", "
             s"{ $fieldsStr, $implicitsStr }"
         case Term.Get(t, field) => s"($t.$field)"
-        case Term.Empty => " ? "
         case Term.As(te, ty) => s"($te : $ty)"
 
 
@@ -55,7 +53,6 @@ enum Term {
         case Mod(fields, implicits) => Mod(fields.mapV(_.shift(amount, cutoff + 1)), implicits.mapB(_.shift(amount, cutoff + 1)))
         case Interface(fields, implicits) => Interface(fields.mapV(_.shift(amount, cutoff + 1)), implicits.map(_.shift(amount, cutoff + 1)))
         case Get(t, field) => Get(t.shift(amount, cutoff), field)
-        case Empty => Empty
         case Term.As(te, ty) => Term.As(te.shift(amount, cutoff), ty.shift(amount, cutoff))
 
 
@@ -73,7 +70,6 @@ enum Term {
         case Mod(fields, implicits) => Mod(fields.mapV(_.replace(y + 1, t >> 1)), implicits.mapB(_.replace(y + 1, t >> 1)))
         case Interface(fields, implicits) => Interface(fields.mapV(_.replace(y + 1, t >> 1)), implicits.map(_.replace(y + 1, t >> 1)))
         case Get(t1, field) => Get(t1.replace(y, t), field)
-        case Empty => Empty
         case Term.As(te, ty) => Term.As(te.replace(y, t), ty.replace(y, t))
 
 
@@ -115,9 +111,14 @@ enum Term {
         case _ => this
 
     def ===(that: Term): Boolean = this == that
+
     def <==(that: Term): Boolean =
         println(s"METHOD STUB called: [default = true] for $this <== $that")
         true
+
+    def <=<(that: Option[Term]): Boolean = that match
+        case Some(value) => this === value
+        case None => true
 
     def check(shape: Term): Either[String, Term] = if this <== shape then Right(this) else Left(s"$this does not match $shape")
 
@@ -137,8 +138,8 @@ enum Term {
         case Some(_) => search(typ, i.tail, all)
         case None => None
 
-    def checkWithSearch(ty: Term, shape: Term, i: I): Either[String, (Term, Term)] =
-        val res = if ty <== shape then Right(this, ty) else Left(s"$this does not match $shape")
+    def checkWithSearch(ty: Term, shape: Option[Term], i: I): Either[String, (Term, Term)] =
+        val res = if ty <=< shape then Right(this, ty) else Left(s"$this does not match $shape")
         res.orElse { (ty, shape) match
             case (Imp(t1, t2), shape) =>
                 search(t1, i, i) match
@@ -146,9 +147,6 @@ enum Term {
                     case Some(arg) => checkWithSearch(t2, shape, i).map { (te, ty) => (App(te, arg), ty) }
             case _ => Left(s"$this does not match $shape")
         }
-
-
-    def typeCheck(expected: Term): Either[String, Term] = typeCheck(Map.empty, Map.empty, Set.empty, expected)
 
     /** generates a term and its type from `this` and an expected `shape` of the type
       *
@@ -158,28 +156,102 @@ enum Term {
       * @param shape expected shape of the type, normal form ? resolution ? transform cannot be called on shape
       * @return either term and types with resolved implicits or an error message
       */
-    def transform(g: G, m: M, i: I, shape: Term): Either[String, (Term, Term)] = shape match
-        // add implicit in context // SHOULD t1 be checked to be nonempty ?
-        case Imp(t1, t2) =>
-            t1.transform(g, m, i, Typ).flatMap((t1te, _) =>
-                transform(g, m, i + (t1te -> 0), t2).map((te, ty) => (Abs(te), Imp(t1, ty)))
-            )
-        // otherwise match on this and apply typechecking rules
-        case _           => this match
-            // checks if Typ matches shape
-            case Typ => Typ.checkWithSearch(Typ, shape, i)
-            // get type from context
-            case Var(x) => g get x match
-                // checks if variable matches shape
-                case Some(value) => Var(x).checkWithSearch(value, shape, i)
-                // report undefined variable type
-                case None => Left("undefined variable")
+    def transform(g: G, m: M, i: I, shape: Option[Term]): Either[String, (Term, Term)] =
+        // typecheck and transform the shape
+        shape.map(_.transform(g, m, i, Some(Typ)).map(_(0).eval)) match
+            // add implicit in context // SHOULD t1 be checked to be nonempty ?
+            case Some(Right(Imp(t1, t2))) =>
+                t1.transform(g, m, i, Some(Typ)).flatMap((t1te, _) =>
+                    transform(g, m, i + (t1te -> 0), Some(t2)).map((te, ty) => (Abs(te), Imp(t1, ty)))
+                )
+            // otherwise match on this and apply typechecking rules
+            case _           => this match
+                // checks if Typ matches shape
+                case Typ => Typ.checkWithSearch(Typ, shape, i)
+                // get type from context
+                case Var(x) => g get x match
+                    // checks if variable matches shape
+                    case Some(value) => Var(x).checkWithSearch(value, shape, i)
+                    // report undefined variable type
+                    case None => Left("undefined variable")
+                // use shape to generate type for abstraction
+                case Abs(t) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
+                    case Some(Pro(t1, t2)) =>    // Done SHOULD t1 be checked to be nonempty
+                        (t.transform((g >> 1) + (0 -> t1), m >> 1, i >> 1, Some(t2))).map { (te, t3) =>
+                            (Abs(te), Pro(t1, t3))
+                        }
+                    case _ => Left("type neccessary to type check abstraction")
+                // typecheck t1 and use the result to typecheck t2
+                case App(t1, t2) =>
+                    t1.transform(g, m, i, None).flatMap {
+                        case (abs, Pro(u1, u2)) =>
+                            t2.transform(g, m, i, Some(u1)).flatMap { (t2te, t2ty) =>
+                                App(abs, t2te).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i)
+                            }
+                        case (_, _) => Left(s"$t1 should have a product type")
+                    }
+                // parameter and result should be a type
+                case Pro(t1, t2) =>
+                    t1.transform(g, m, i, Some(Typ)).flatMap { (u1, _) =>
+                        t2.transform((g >> 1) + (0 -> t1), m >> 1, i >> 1, Some(Typ)).flatMap { (u2, _) =>
+                            Pro(u1, u2).checkWithSearch(Typ, shape, i)
+                        }
+                    }
+                // search for implicit to match shape
+                case Phi => shape match
+                    case Some(value) => search(value, i, i).map(Right(_, value)).getOrElse(Left(s"no implicit found for $shape"))
+                    case None => Left(s"no implicit found for $shape")
+                // parameter and result should be a type
+                case Imp(t1, t2) =>
+                    t1.transform(g, m, i, Some(Typ)).flatMap { (u1, _) =>
+                        t2.transform(g, m, i + (t1 -> 0), Some(Typ)).flatMap { (u2, _) =>
+                            Imp(u1, u2).checkWithSearch(Typ, shape, i)
+                        }
+                    }
+                // check te against ty and then verify the shape
+                case As(te, ty) => te.transform(g, m, i, Some(ty)).flatMap { (ue, uy) =>
+                    ue.checkWithSearch(uy, shape, i)
+                }
 
-            // case Abs(t) => shape.eval match // WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
-            //     case Pro(t1, t2) => // SHOULD t1 be checked to be nonempty
-            //         for t3 <- t.transform((g >> 1) + (0 -> t1), m >> 1, i >> 1, t2)
-            //         yield Pro(t1, t3)
-            //     case _ => Left("type neccessary to type check abstraction")
+                // TODO how will implicits of mod be resolved ?
+                // case mod: Mod if m contains mod => Right(mod, m(mod)) // take the module type from the module-context
+                // case mod @ Mod(fields, implicits) => shape match
+                //     case Some(int @ Interface(types, imps)) =>
+                //         // build the type of the fields
+                //         val fieldTypes = fields.keys.foldLeft[Either[String, Map[String, Term]]](Right(Map.empty)) {
+                //             case (Right(coll), key) =>
+                //                 val fieldTe = fields(key)
+                //                 val fieldTy = types(key)
+                //                 val newImps = (i ++ implicits)
+                //                 fieldTe.replace(0, this >> 1).transform(g, m + (mod -> int), i, Some(fieldTy)) map { ty =>
+                //                     coll + (key -> ty)
+                //                 }
+                //             case (Left(error), _) => Left(error)
+                //         }
+                //         // build the types of the implicits
+                //         val implicitsTy = implicits.foldLeft[Either[String, Set[Term]]](Right(Set.empty)) {
+                //             case (Right(coll), ty -> te) =>
+                //                 val newImps = (p ++ implicits.keySet)
+                //                 te.replace(0, this >> 1).typeCheck(g, m + (mod -> int), newImps, ty) map { coll + _ }
+                //             case (Left(error), _) => Left(error)
+                //         }
+                //         // combine the implicit types and the fields types into the interface
+                //         fieldTypes.flatMap { fty =>
+                //             implicitsTy.flatMap { ity =>
+                //                 if ity == implicitsT // different equality SHOULD type contain information about implicits?
+                //                 then Right(Interface(fty, ity))
+                //                 else Left(s"modules implicits do not match interface: $ity, $implicitsT")
+                //             }
+                //         }
+
+
+                //     case None => Left("interface type needed to check module")
+
+                // case Interface(fields, implicits) => ???
+                // case Get(t, field) => ???
+
+
+    def typeCheck(expected: Term): Either[String, Term] = typeCheck(Map.empty, Map.empty, Set.empty, expected)
 
     def typeCheck(g: G, m: M, p: P, shape: Term): Either[String, Term] = shape match
 
@@ -208,7 +280,7 @@ enum Term {
 
             // typecheck t1 and proceed from there-on
             case App(t1, t2) => // TRIGGER implicit search ?? -- maybe it shouldn't because Empty shape should prevent implicit type here
-                t1.typeCheck(g, m, p, Empty).flatMap {
+                t1.typeCheck(g, m, p, ???).flatMap {
                     case Pro(u1, u2) =>
                         t2.typeCheck(g, m, p, u1).flatMap { _ =>
                             (u2.replace(0, t2 >> 1) << 1) check shape // search triggered implicitly by check?
@@ -239,7 +311,7 @@ enum Term {
             case Term.As(te, ty) => te.typeCheck(g, m, p, ty).flatMap { _ check shape }
 
             // no valid term -- only for type shapes
-            case Empty => Left(s"empty shape has no type") // RETURN SHAPE ?
+            //case Empty => Left(s"empty shape has no type") // RETURN SHAPE ?
 
             // module rules
             case mod: Mod if m contains mod => Right(m(mod)) // take the module type from the module-context
@@ -281,7 +353,7 @@ enum Term {
                 then Right(Typ) else Left("malformed interface")
 
             case Get(t, field) =>
-                t.typeCheck(g, m, p, Empty).flatMap {
+                t.typeCheck(g, m, p, ???).flatMap {
                     case Interface(fields, implicits) => fields get field match
                         case Some(value) if value <== shape => Right(value)
                         case Some(value) => Left(s"$value does not fulfill $shape")
