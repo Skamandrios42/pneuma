@@ -10,3 +10,4 @@ project/metals.sbt
 target
 .idea
 .DS_Store
+out
