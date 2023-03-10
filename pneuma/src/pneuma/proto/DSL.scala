@@ -18,39 +18,45 @@ object DSL {
         def !(field: String) = Term.Get(self, field)
     }
 
-    case class Def(field: String, term: Term)
+    //case class Def(field: String, term: Term)
 
     extension (self: String) {
-        def :=(term: Term) = Def(self, term)
+        def :=(term: Term) = ModElem.Named(self, term)
+        def ::=(term: Term) = IntElem.Named(self, term)
+    }
+    extension (self: Term) {
+        def ?=(term: Term) = ModElem.Imp(self, term)
     }
 
-    def mod(defs: Def*)(imps: (Term, Term)*) = Term.Mod(Map.from(defs.map(d => (d.field, d.term))), imps.toMap)
-    def int(defs: Def*)(imps: Term*) = Term.Interface(Map.from(defs.map(d => (d.field, d.term))), imps.toSet)
+    given Conversion[Term, IntElem] = IntElem.Imp(_)
+
+    def mod(defs: ModElem*) = Term.Module(defs.toList)
+    def int(defs: IntElem*) = Term.Interface(defs.toList)
 
 }
 
-def test_1(): Unit =
-    import DSL.{*, given}
-    val te = \(0 at ?)
-    val ty = (* --> *) --> (* -?> *)
-    te.typeCheck(expected = ty) match
-        case Left(value) => println(value)
-        case Right(value) => println(value)
+// def test_1(): Unit =
+//     import DSL.{*, given}
+//     val te = \(0 at ?)
+//     val ty = (* --> *) --> (* -?> *)
+//     te.typeCheck(expected = ty) match
+//         case Left(value) => println(value)
+//         case Right(value) => println(value)
 
-def test_2(): Unit =
-    import DSL.{*, given}
-    val te: Term = mod (
-        "x" := *,
-        "y" := (* --> *),
-    )()
-    val ty: Term = int (
-        "x" := *,
-        "y" := (0 ! "x")
-    )()
-    te.typeCheck(expected = ty) match
-        case Left(value) => println(value)
-        case Right(value) => println(value)
+// def test_2(): Unit =
+//     import DSL.{*, given}
+//     val te: Term = mod (
+//         "x" := *,
+//         "y" := (* --> *),
+//     )()
+//     val ty: Term = int (
+//         "x" := *,
+//         "y" := (0 ! "x")
+//     )()
+//     te.typeCheck(expected = ty) match
+//         case Left(value) => println(value)
+//         case Right(value) => println(value)
 
-@main def tests(): Unit =
-    test_1()
-    test_2()
+// @main def tests(): Unit =
+//     test_1()
+//     test_2()
