@@ -31,7 +31,7 @@ class Tests extends AnyFunSuite:
         case (Success(value), _) => println(value)
         case (Failure(error), _) => println(error)
 
-    test("error messages") {
+    def x = test("error messages") {
         println(("H" <*> "E")("Hello World!", 0))
         debug("2 +")
         debug("3 * (2 + 2]")

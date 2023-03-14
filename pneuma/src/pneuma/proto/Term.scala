@@ -1,7 +1,14 @@
 package pneuma.proto
 
 import scala.annotation.targetName
-import lambdacalculus.Generator
+
+class Namer(val base: String) {
+    private var index = 0
+    def next() =
+        val name = f"$base$index%04d"
+        index += 1
+        name
+}
 
 enum ModElem {
     case Named(name: String, term: Term)
@@ -26,7 +33,7 @@ enum IntElem {
 
 enum Term {
     // abstract syntax tree
-    case Var(x: Int)
+    case Var(x: Int, tagged: Option[Term])
     case Abs(t: Term)
     case App(t1: Term, t2: Term)
     case Typ
@@ -40,7 +47,8 @@ enum Term {
 
     // toString implementation
     override def toString: String = this match
-        case Term.Var(x) => s"$x"
+        case Term.Var(x, Some(t)) => s"$x[$t]"
+        case Term.Var(x, None) => s"$x"
         case Term.Abs(t) => s"(λ.$t)"
         case Term.App(t1, t2) => s"($t1 $t2)"
         case Term.Typ => "*"
@@ -77,7 +85,8 @@ enum Term {
 
     // helpers for evaluation
     def shift(amount: Int, cutoff: Int): Term = this match
-        case Var(x) => if x >= cutoff then Var(x + amount) else Var(x)
+        case Var(x, Some(t)) => if x >= cutoff then Var(x + amount, Some(t.shift(amount, cutoff))) else Var(x, Some(t.shift(amount, cutoff)))
+        case Var(x, None) => if x >= cutoff then Var(x + amount, None) else Var(x, None)
         case Abs(t) => Abs(t.shift(amount, cutoff + 1))
         case App(t1, t2) => App(t1.shift(amount, cutoff), t2.shift(amount, cutoff))
         case Typ => Typ
@@ -93,7 +102,8 @@ enum Term {
     def <<(amount: Int) = shift(-amount, 0)
 
     def replace(y: Int, t: Term): Term = this match
-        case Var(x) => if x == y then t else Var(x)
+        case Var(x, Some(e)) => if x == y then t else Var(x, Some(e.replace(y, t)))
+        case Var(x, None) => if x == y then t else Var(x, None)
         case Abs(t1) => Abs(t1.replace(y + 1, t >> 1))
         case App(t1, t2) => App(t1.replace(y, t), t2.replace(y, t))
         case Typ => Typ
@@ -104,6 +114,37 @@ enum Term {
         case Interface(fields) => Interface(fields.mapValues(_.replace(y + 1, t >> 1)))
         case Get(t1, field) => Get(t1.replace(y, t), field)
         case Term.As(te, ty) => Term.As(te.replace(y, t), ty.replace(y, t))
+
+    def tag(y: Int, t: Term): Term = this match
+        case Var(x, Some(e)) => 
+            if x == y then
+                println("Warning! Retagged variable!")
+                Var(x, Some(t))
+            else Var(x, Some(e.tag(y, t)))
+        case Var(x, None) => if x == y then Var(x, Some(t)) else Var(x, None)
+        case Abs(t1) => Abs(t1.tag(y + 1, t >> 1))
+        case App(t1, t2) => App(t1.tag(y, t), t2.tag(y, t))
+        case Typ => Typ
+        case Phi => Phi
+        case Pro(t1, t2) => Pro(t1.tag(y, t), t2.tag(y + 1, t >> 1))
+        case Imp(t1, t2) => Imp(t1.tag(y, t), t2.tag(y + 1, t >> 1))
+        case Module(fields) => Module(fields.mapValues(_.tag(y + 1, t >> 1)))
+        case Interface(fields) => Interface(fields.mapValues(_.tag(y + 1, t >> 1)))
+        case Get(t1, field) => Get(t1.tag(y, t), field)
+        case Term.As(te, ty) => Term.As(te.tag(y, t), ty.tag(y, t))
+
+    def untag: Term = this match
+        case Var(x, _) => Var(x, None)
+        case Abs(t1) => Abs(t1.untag)
+        case App(t1, t2) => App(t1.untag, t2.untag)
+        case Typ => Typ
+        case Phi => Phi
+        case Pro(t1, t2) => Pro(t1.untag, t2.untag)
+        case Imp(t1, t2) => Imp(t1.untag, t2.untag)
+        case Module(fields) => Module(fields.mapValues(_.untag))
+        case Interface(fields) => Interface(fields.mapValues(_.untag))
+        case Get(t1, field) => Get(t1.untag, field)
+        case Term.As(te, ty) => Term.As(te.untag, ty.untag)
 
     def eval: Term = this match
         case Term.App(t1, t2) => (t1.eval, t2.eval) match
@@ -116,6 +157,7 @@ enum Term {
                     case _ => Term.Get(mod, field)
             case e => Term.Get(e, field)
         case Term.As(te, ty) => te
+        case Var(x, Some(t)) => t
         case _ => this
 
 
@@ -175,23 +217,25 @@ enum Term {
       * @return either term and types with resolved implicits or an error message
       */
     def transform(g: G, m: M, i: I, shape: Option[Term]): Either[String, (Term, Term)] =
-        println(s"debug: [$this] [$shape]")
+        shape match
+            case None => println(s"[DEBUG] $this")
+            case Some(value) => println(s"[DEBUG] $this : $value")
         // typecheck and transform the shape
         if this == Typ && shape.contains(Typ) then Right(Typ, Typ)
         else shape.map(_.transform(g, m, i, Some(Typ)).map(_(0).eval)) match
             // add implicit in context // SHOULD t1 be checked to be nonempty ?
             case Some(Right(Imp(t1, t2))) =>
                 t1.transform(g, m, i, Some(Typ)).flatMap((t1te, _) =>
-                    (this >> 1).transform(g >> 1, m, i + (t1te -> Var(0)), Some(t2)).map((te, ty) => (Abs(te), Imp(t1, ty)))
+                    (this >> 1).transform(g >> 1, m, i + (t1te -> Var(0, None)), Some(t2)).map((te, ty) => (Abs(te), Imp(t1, ty)))
                 )
             // otherwise match on this and apply typechecking rules
             case _           => this match
                 // checks if Typ matches shape
                 case Typ => Typ.checkWithSearch(Typ, shape, i)
                 // get type from context
-                case Var(x) => g get x match
+                case Var(x, tag) => g get x match
                     // checks if variable matches shape
-                    case Some(value) => Var(x).checkWithSearch(value, shape, i)
+                    case Some(value) => Var(x, tag).checkWithSearch(value, shape, i)
                     // report undefined variable type
                     case None => Left("undefined variable")
                 // use shape to generate type for abstraction
@@ -224,7 +268,7 @@ enum Term {
                 // parameter and result should be a type
                 case Imp(t1, t2) =>
                     t1.transform(g, m, i, Some(Typ)).flatMap { (u1, _) =>
-                        t2.transform(g, m, i + (t1 -> Var(0)), Some(Typ)).flatMap { (u2, _) =>
+                        t2.transform(g, m, i + (t1 -> Var(0, None)), Some(Typ)).flatMap { (u2, _) =>
                             Imp(u1, u2).checkWithSearch(Typ, shape, i)
                         }
                     }
@@ -233,12 +277,17 @@ enum Term {
                     ue.checkWithSearch(uy, shape, i)
                 }
 
-                case mod: Module if m contains mod => Right(mod, m(mod))
+                //case mod: Module if m contains mod => Right(mod, m(mod))
 
                 // TODO consider shape
-                case Module(fields) => checkModuleTailRecursive(fields, Nil, Nil, g, m, i, Generator.Namer("imp$"))
+                case Module(fields) => shape match
+                    case None => checkModule(fields, Nil, Nil, g >> 1, m >> 1, i >> 1, Namer("imp$"))
+                    case Some(Interface(types)) => checkModuleWithInterface(fields.zip(types), Nil, Nil, g >> 1, m >> 1, i >> 1, Namer("imp$"))
+                    case Some(_) => Left("you're dumb")
                 // TODO consider shape
-                case Interface(fields) => checkInterfaceTailRecursive(fields, Nil, g, m, i)
+                case Interface(fields) => checkInterface(fields, Nil, g >> 1, m >> 1, i >> 1).flatMap { (te, ty) =>
+                    te.checkWithSearch(ty, shape, i)
+                }
 
                 case Get(t, field) => t.transform(g, m, i, None).flatMap { 
                     case (te, Interface(fields)) => 
@@ -248,228 +297,52 @@ enum Term {
                     case _ => Left("no '$field' field")
                 }
 
-    def checkModuleTailRecursive(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, m: M, i: I, namer: Generator.Namer): Either[String, (Module, Interface)] = fields match
+    def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, m: M, i: I, namer: Namer): Either[String, (Module, Interface)] = fields match
+        case Nil => Right(Module(module.reverse), Interface(interface.reverse))
+        case (ModElem.Named(name, term), IntElem.Named(_name, typ)) :: next if name == _name => 
+            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), m + (Module(module) -> Interface(interface)), impContext, Some(typ)).flatMap { (te, ty) =>
+                checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, m, i, namer)
+            }
+        case (ModElem.Imp(typ, term), IntElem.Imp(name, typ2)) :: next if typ === typ2 =>
+            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            typ.transform((g >> 1) + (0 -> Interface(interface)), m + (Module(module) -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
+                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), m + (Module(module) -> Interface(interface)), impContext, Some(u)).flatMap { (te, ty) =>
+                    checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, m, i, namer)
+                }
+            }
+    
+    def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, m: M, i: I, namer: Namer): Either[String, (Module, Interface)] = fields match
         case Nil => Right(Module(module.reverse), Interface(interface.reverse))
         case ModElem.Named(name, term) :: next => 
-            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0), name)) }
-            term.replace(0, Module(module) >> 1).transform(g, m + (Module(module) -> Interface(interface)), impContext, None).flatMap { (te, ty) =>
-                checkModuleTailRecursive(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, m, i, namer)
+            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), m + (Module(module) -> Interface(interface)), impContext, None).flatMap { (te, ty) =>
+                checkModule(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, m, i, namer)
             }
         case ModElem.Imp(typ, term) :: next =>
-            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0), name)) }
-            typ.replace(0, Module(module) >> 1).transform(g, m + (Module(module) -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
-                term.replace(0, Module(module) >> 1).transform(g, m + (Module(module) -> Interface(interface)), impContext, Some(u)).flatMap { (te, ty) =>
+            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            typ.transform((g >> 1) + (0 -> Interface(interface)), m + (Module(module) -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
+                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), m + (Module(module) -> Interface(interface)), impContext, Some(u)).flatMap { (te, ty) =>
                     val name = namer.next()
-                    checkModuleTailRecursive(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, m, i, namer)
+                    checkModule(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, m, i, namer)
                 }
             }
 
-    def checkInterfaceTailRecursive(fields: List[IntElem], checked: List[IntElem], g: G, m: M, i: I): Either[String, (Interface, Term.Typ.type)] = fields match
+    def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, m: M, i: I): Either[String, (Interface, Term.Typ.type)] = fields match
         case Nil => Right(Interface(checked.reverse), Typ)
         case IntElem.Named(name, typ) :: next =>
-            val impContext =  i ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0), name)) }
+            val impContext =  i ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
             typ.transform((g >> 1) + (0 -> Interface(checked)), m, impContext, Some(Typ)).flatMap { (ty, _) => 
-                checkInterfaceTailRecursive(next, IntElem.Named(name, ty) :: checked, g, m, i)
+                checkInterface(next, IntElem.Named(name, ty) :: checked, g, m, i)
             }
         case IntElem.Imp(name, typ) :: next =>
-            val impContext =  i ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0), name)) }
+            val impContext =  i ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
             typ.transform((g >> 1) + (0 -> Interface(checked)), m, impContext, Some(Typ)).flatMap { (ty, _) => 
-                checkInterfaceTailRecursive(next, IntElem.Imp(name, ty) :: checked, g, m, i)
+                checkInterface(next, IntElem.Imp(name, ty) :: checked, g, m, i)
             }
 
     def typeCheck = transform(Map.empty, Map.empty, Map.empty, None)
+    
     def typeCheck(ty: Term) = transform(Map.empty, Map.empty, Map.empty, Some(ty))
-
-    
-    // def checkModuleAsRecord(fields: List[ModElem], g: G, m: M, i: I, namer: Generator.Namer): Either[String, (Module, Interface)] = fields match
-    //     case Nil => Right(Module(Nil), Interface(Nil))
-    //     case ModElem.Named(name, term) :: next => 
-    //         term.transform(g, m, i, None).flatMap { (te, ty) =>
-    //             checkModuleAsRecord(next, g, m, i, namer).map { (mod, int) =>
-    //                 (Module(ModElem.Named(name, te) :: mod.fields), Interface(IntElem.Named(name, ty) :: int.fields))
-    //             }
-    //         }
-    //     case ModElem.Imp(typ, term) :: next =>
-    //         typ.transform(g, m, i, Some(Typ)).flatMap { (u, _) => 
-    //             term.transform(g, m, i, Some(u)).flatMap { (te, ty) =>
-    //                 checkModuleAsRecord(next, g, m, i, namer).map { (mod, int) =>
-    //                     val name = namer.next()
-    //                     (Module(ModElem.Named(name, te) :: mod.fields), Interface(IntElem.Named(name, ty) :: int.fields))
-    //                 }
-    //             }
-    //         }
-    
-    // def checkModule(fields: List[ModElem], g: G, m: M, i: I, shape: List[IntElem]): Either[String, (Term, Term)] = ???
-
-
-
-/*
-
-
-name = term
-
-
-*/
-
-
-
-
-
-
-
-
-
-                // TODO how will implicits of mod be resolved ?
-                // case mod: Mod if m contains mod => Right(mod, m(mod)) // take the module type from the module-context
-                // case mod @ Mod(fields, implicits) => shape match
-                //     case Some(int @ Interface(types, imps)) =>
-                //         // build the type of the fields
-                //         val fieldTypes = fields.keys.foldLeft[Either[String, Map[String, Term]]](Right(Map.empty)) {
-                //             case (Right(coll), key) =>
-                //                 val fieldTe = fields(key)
-                //                 val fieldTy = types(key)
-                //                 val newImps = (i ++ implicits)
-                //                 fieldTe.replace(0, this >> 1).transform(g, m + (mod -> int), i, Some(fieldTy)) map { ty =>
-                //                     coll + (key -> ty)
-                //                 }
-                //             case (Left(error), _) => Left(error)
-                //         }
-                //         // build the types of the implicits
-                //         val implicitsTy = implicits.foldLeft[Either[String, Set[Term]]](Right(Set.empty)) {
-                //             case (Right(coll), ty -> te) =>
-                //                 val newImps = (p ++ implicits.keySet)
-                //                 te.replace(0, this >> 1).typeCheck(g, m + (mod -> int), newImps, ty) map { coll + _ }
-                //             case (Left(error), _) => Left(error)
-                //         }
-                //         // combine the implicit types and the fields types into the interface
-                //         fieldTypes.flatMap { fty =>
-                //             implicitsTy.flatMap { ity =>
-                //                 if ity == implicitsT // different equality SHOULD type contain information about implicits?
-                //                 then Right(Interface(fty, ity))
-                //                 else Left(s"modules implicits do not match interface: $ity, $implicitsT")
-                //             }
-                //         }
-
-
-                //     case None => Left("interface type needed to check module")
-
-                // case Interface(fields, implicits) => ???
-                // case Get(t, field) => ???
-
-
-
-
-
-
-
-    // def typeCheck(expected: Term): Either[String, Term] = typeCheck(Map.empty, Map.empty, Set.empty, expected)
-
-//     def typeCheck(g: G, m: M, p: P, shape: Term): Either[String, Term] = shape match
-
-//         // add implicit in context // SHOULD t1 be checked to be nonempty ?
-//         case Imp(t1, t2) => this.typeCheck(g, m, p + t1, t2).map { res => Imp(t1, res) }
-
-//         // otherwise match on this and apply typechecking rules
-//         case _           => this match
-
-//             // checks if Typ matches shape
-//             case Typ    => Typ check shape
-
-//             // get type from context
-//             case Var(x) => g get x match
-//                 // checks if variable matches shape
-//                 case Some(value) => value check shape // TRIGGER search if value expects implicit but shouldn't do so
-//                 // report undefined variable type
-//                 case None => Left("undefined variable")
-
-//             // get product type from shape
-//             case Abs(t) => shape.eval match // WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
-//                 case Pro(t1, t2) => // SHOULD t1 be checked to be nonempty
-//                     for t3 <- t.typeCheck((g >> 1) + (0 -> t1), m >> 1, p >> 1, t2)
-//                     yield Pro(t1, t3)
-//                 case _ => Left("type neccessary to type check abstraction")
-
-//             // typecheck t1 and proceed from there-on
-//             case App(t1, t2) => // TRIGGER implicit search ?? -- maybe it shouldn't because Empty shape should prevent implicit type here
-//                 t1.typeCheck(g, m, p, ???).flatMap {
-//                     case Pro(u1, u2) =>
-//                         t2.typeCheck(g, m, p, u1).flatMap { _ =>
-//                             (u2.replace(0, t2 >> 1) << 1) check shape // search triggered implicitly by check?
-//                         }
-//                     case _ => Left(s"$t1 should have a product type")
-//                 }
-
-//             // parameter and result should be a type
-//             case Pro(t1, t2) =>
-//                 t1.typeCheck(g, m, p, Typ).flatMap { _ =>
-//                     t2.typeCheck((g >> 1) + (0 -> t1), m >> 1, p >> 1, Typ).flatMap { _ =>
-//                         Typ check shape
-//                     }
-//                 }
-
-//             // search for implicit to match shape
-//             case Phi => if query(shape, p, p) then Right(shape) else Left(s"no implicit found for $shape")
-
-//             // parameter and result should be a type
-//             case Imp(t1, t2) =>
-//                 t1.typeCheck(g, m, p, Typ).flatMap { _ =>
-//                     t2.typeCheck(g, m, p + t1, Typ).flatMap { _ =>
-//                         Typ check shape
-//                     }
-//                 }
-
-//             // check te against ty and then verify the shape
-//             case Term.As(te, ty) => te.typeCheck(g, m, p, ty).flatMap { _ check shape }
-
-//             // no valid term -- only for type shapes
-//             //case Empty => Left(s"empty shape has no type") // RETURN SHAPE ?
-
-//             // module rules
-//             case mod: Module if m contains mod => Right(m(mod)) // take the module type from the module-context
-
-//             case mod @ Module(fields, implicits) => shape.eval match
-//                 // required interface type
-//                 case int @ Interface(fieldsT, implicitsT) =>
-//                     // build the type of the fields
-//                     val fieldsTy = fields.keys.foldLeft[Either[String, Map[String, Term]]](Right(Map.empty)) {
-//                         case (Right(coll), key) =>
-//                             val fieldTe = fields(key)
-//                             val fieldTy = fieldsT(key)
-//                             val newImps = (p ++ implicits.keySet)
-//                             fieldTe.replace(0, this >> 1).typeCheck(g, m + (mod -> int), newImps, fieldTy) map { ty =>
-//                                 coll + (key -> ty)
-//                             }
-//                         case (Left(error), _) => Left(error)
-//                     }
-//                     // build the types of the implicits
-//                     val implicitsTy = implicits.foldLeft[Either[String, Set[Term]]](Right(Set.empty)) {
-//                         case (Right(coll), ty -> te) =>
-//                             val newImps = (p ++ implicits.keySet)
-//                             te.replace(0, this >> 1).typeCheck(g, m + (mod -> int), newImps, ty) map { coll + _ }
-//                         case (Left(error), _) => Left(error)
-//                     }
-//                     // combine the implicit types and the fields types into the interface
-//                     fieldsTy.flatMap { fty =>
-//                         implicitsTy.flatMap { ity =>
-//                             if ity == implicitsT // different equality SHOULD type contain information about implicits?
-//                             then Right(Interface(fty, ity))
-//                             else Left(s"modules implicits do not match interface: $ity, $implicitsT")
-//                         }
-//                     }
-//                 case _ => Left("interface type needed to check module")
-
-//             case int @ Interface(fields, implicits) =>
-//                 if  fields.forall { field => field(1).typeCheck((g >> 1) + (0 -> int), m >> 1, p >> 1, Typ).isRight } &&
-//                     implicits.forall { _.typeCheck((g >> 1) + (0 -> int), m >> 1, p >> 1, Typ).isRight }
-//                 then Right(Typ) else Left("malformed interface")
-
-//             case Get(t, field) =>
-//                 t.typeCheck(g, m, p, ???).flatMap {
-//                     case Interface(fields, implicits) => fields get field match
-//                         case Some(value) if value <== shape => Right(value)
-//                         case Some(value) => Left(s"$value does not fulfill $shape")
-//                         case None => Left("undefined field")
-//                     case _ => Left(s"expected interface")
-//                 }
 
 }

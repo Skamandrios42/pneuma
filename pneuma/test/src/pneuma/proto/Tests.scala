@@ -13,49 +13,61 @@ class Tests extends AnyFunSuite {
     }
 
     test("implicits") {
-        // \x -> x ?
         val te = \(0 at ?)
         val ty = (* --> *) --> (* -?> *)
-        // \x -> \y -> x y
         val teRes = \(\(1 at 0))
         assert((te typeCheck ty) == Right(teRes, ty))
     }
 
     test("modules") {
         val te = mod(
-            "id" := \(0) as * --> *,
-            "te" := \(0 at ?) as ((* --> *) --> (* -?> *)),
+            "id" := \(0),
+            "te" := \(0 at ?),
             * ?= *,
         )
         val ty = int(
             "id" ::= * --> *,
             "te" ::= (* --> *) --> (* -?> *),
-            "imp$0000" ::= *,
+            "imp$0000" ?= *,
         )
         val teRes = mod(
             "id" := \(0),
             "te" := \(\(1 at 0)),
             "imp$0000" := *,
         )
-        assert((te.typeCheck) == Right(teRes, ty))
+        assert((te.typeCheck(ty)) == Right(teRes, ty))
     }
 
-    test("modules with implicits") {
+    test("implicits in modules I") {
         val te = mod(
-            "id" := \(0),
-            * ?= *,
-            "use" := (0 ! "id") at ?,
-            "res" := (0 ! "use"),
+            "a" := \(0),
+            "c" := (0 ! "a") at ?
         )
         val ty = int(
-            "id" ::= * --> *,
-            *,
-            "use" ::= * -?> *,
-            "res" ::= *,
+            "a" ::= * --> *,
+            "c" ::= * -?> *
         )
-        assert((te typeCheck ty) == Right(ty))
-        println(((te as ty) ! "use") typeCheck (* -?> *))
-        println(((te as ty) ! "res") typeCheck *)
+        val teRes = mod(
+            "a" := \(0),
+            "c" := \((1 ! "a") at 0)
+        )
+        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(teRes, ty))
+    }
+
+    test("implicits in modules II") {
+        val te = mod(
+            "a" := \(0),
+            "c" := (0 ! "a") at ?
+        )
+        val ty = * -?> int(
+            "a" ::= * --> *,
+            "c" ::= *
+        )
+        val teRes = \(mod(
+            "a" := \(0),
+            "c" := (0 ! "a") at 1
+        ))
+        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(teRes, ty))
     }
 
 }
