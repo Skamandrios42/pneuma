@@ -2,21 +2,20 @@ import mill._
 import scalalib._
 
 /* version 0.0.0 -- core */
-// TODO module checking with expected shape
-// TODO module insertion preventation -- better module checking algorithm
-// TODO equivalence function
+// TODO module checking with expected shape DONE
+// TODO module insertion preventation -- better module checking algorithm DONE
+// TODO equivalence function DONE
 // TODO recheck complete structure
+// TODO testing
 // TODO introduce base types
 
-/* version 0.0.0 -- parser */
+/* version 0.0.0 -- infrastructure */
 // TODO build a parser
-
-/* version 0.0.0 -- target */
 // TODO build a bytecode generator
 
 /* version 0.0.0 -- release */
-// TODO make publishing setup
 // TODO initialize repository
+// TODO make publishing setup
 // TODO clean project
 
 /* version 0.1.0 */
