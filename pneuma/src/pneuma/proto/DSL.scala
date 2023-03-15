@@ -2,6 +2,7 @@ package pneuma.proto
 
 import scala.language.implicitConversions
 
+/** a small _DSL_ for [[Term]] */
 object DSL {
 
     val \ = Term.Abs

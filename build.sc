@@ -7,7 +7,7 @@ import scalalib._
 // TODO equivalence function DONE
 
 /* version 0.0.0 -- core ii */
-// TODO document everything
+// TODO document pneuma.proto DONE
 // TODO recheck complete structure
 // TODO rethink the implicit naming conventions
 // TODO make modules recursive
