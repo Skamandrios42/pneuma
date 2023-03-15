@@ -2,6 +2,10 @@ package pneuma.proto
 
 import scala.annotation.targetName
 
+/** class to generate new names of the format 'base0000'
+  * @note not thread-safe, uses mutable state, should probably be removed in later versions
+  * @param base the root string of a generated name 
+  */
 class Namer(val base: String) {
     private var index = 0
     def next() =
@@ -10,29 +14,38 @@ class Namer(val base: String) {
         name
 }
 
+/** a definition in a module; either a [[ModElem.Named named]] or an [[ModElem.Imp implicit]] definition */
 enum ModElem {
     case Named(name: String, term: Term)
     case Imp(typ: Term, term: Term)
-    override def toString(): String = this match
-        case Named(name, term) => s"$name = $term"
-        case Imp(typ, term) => s"φ : $typ = $term"
+
+    /** @return the name, if this is [[ModElem.Named]] */
     def ident = this match
         case Named(name, term) => Some(name)
         case Imp(typ, term) => None
+
+    override def toString(): String = this match
+        case Named(name, term) => s"$name = $term"
+        case Imp(typ, term) => s"? : $typ = $term"
 }
+
+/** a definitions type in an interface; either for [[IntElem.Named named]] or for [[IntElem.Imp implicit]] definitions */
 enum IntElem {
     case Named(name: String, typ: Term)
     case Imp(name: String, typ: Term)
-    override def toString(): String = this match
-        case Named(name, term) => s"$name : $term"
-        case Imp(name, typ) => s"φ : $typ"
+
+    /** @return the name, if this is [[IntElem.Named]] */
     def ident = this match
         case Named(name, term) => Some(name)
         case Imp(name, typ) => None
+
+    override def toString(): String = this match
+        case Named(name, term) => s"$name : $term"
+        case Imp(name, typ) => s"$name ?: $typ"
 }
 
+/** The abstract syntax tree representation of a pneuma program */
 enum Term {
-    // abstract syntax tree
     case Var(x: Int, tagged: Option[Term])
     case Abs(t: Term)
     case App(t1: Term, t2: Term)
@@ -45,45 +58,51 @@ enum Term {
     case Get(t: Term, field: String)
     case As(te: Term, ty: Term)
 
-    // toString implementation
+    /** generates a simple string representation of the program */
     override def toString: String = this match
         case Term.Var(x, Some(t)) => s"$x[$t]"
         case Term.Var(x, None) => s"$x"
         case Term.Abs(t) => s"(λ.$t)"
         case Term.App(t1, t2) => s"($t1 $t2)"
         case Term.Typ => "*"
-        case Term.Phi => "φ"
+        case Term.Phi => "?"
         case Term.Pro(t1, t2) => s"(π$t1.$t2)"
-        case Term.Imp(t1, t2) => s"(φ$t1.$t2)"
+        case Term.Imp(t1, t2) => s"(?$t1.$t2)"
         case Term.Module(fields) => s"{ ${fields.mkString(", ")} }"
         case Term.Interface(fields) => s"{ ${fields.mkString(", ")} }"
         case Term.Get(t, field) => s"($t.$field)"
         case Term.As(te, ty) => s"($te : $ty)"
 
-    // module / interface manipulators
-    extension [K, V](self: List[(K, V)]) {
-        def mapValues[W](f: V => W): List[(K, W)] = self.map { case (key, value) => (key, f(value)) }
-    }
-    extension [A](self: List[(A, A)]) {
-        def mapBoth[B](f: A => B): List[(B, B)] = self.map { case (key, value) => (f(key), f(value)) }
-    }
-
+    
     extension [A](self: List[ModElem]) {
-        @targetName("mapValuesForModElem")
-        def mapValues(f: Term => Term) = self map {
+        /** maps f over every occurrence of [[Term]]
+          * @param f a function from Term to Term
+          * @return the mapped ModElem
+          */
+        @targetName("mapValuesModElem")
+        def mapValues(f: Term => Term) = self.map {
             case ModElem.Named(name, term) => ModElem.Named(name, f(term))
             case ModElem.Imp(typ, term) => ModElem.Imp(f(typ), f(term))
         }
     }
+
     extension [A](self: List[IntElem]) {
-        @targetName("mapValuesForIntElem")
-        def mapValues(f: Term => Term) = self map {
+        /** maps f over every occurrence of [[Term]]
+          * @param f a function from Term to Term
+          * @return the mapped IntElem
+          */
+        @targetName("mapValuesIntElem")
+        def mapValues(f: Term => Term) = self.map {
             case IntElem.Named(name, term) => IntElem.Named(name, f(term))
             case IntElem.Imp(name, typ) => IntElem.Imp(name, f(typ))
         }
     }
 
-    // helpers for evaluation
+    /** adds `amount` to all variables with distance of `cutoff` or longer
+      * @param amount number to be added
+      * @param cutoff border between shifted and not shifted variables
+      * @return the same term, with shifted variables
+      */
     def shift(amount: Int, cutoff: Int): Term = this match
         case Var(x, Some(t)) => if x >= cutoff then Var(x + amount, Some(t.shift(amount, cutoff))) else Var(x, Some(t.shift(amount, cutoff)))
         case Var(x, None) => if x >= cutoff then Var(x + amount, None) else Var(x, None)
@@ -98,9 +117,17 @@ enum Term {
         case Get(t, field) => Get(t.shift(amount, cutoff), field)
         case Term.As(te, ty) => Term.As(te.shift(amount, cutoff), ty.shift(amount, cutoff))
 
+    /** returns [[shift(amount, 0)]] */
     def >>(amount: Int) = shift(amount, 0)
+    
+    /** returns [[shift(-amount, 0)]] */
     def <<(amount: Int) = shift(-amount, 0)
 
+    /** replaces all occurrences of a variable by `t`
+      * @param y the variable to be replaces
+      * @param t the term to be inserted
+      * @return `this` with replaced variables
+      */
     def replace(y: Int, t: Term): Term = this match
         case Var(x, Some(e)) => if x == y then t else Var(x, Some(e.replace(y, t)))
         case Var(x, None) => if x == y then t else Var(x, None)
@@ -115,6 +142,11 @@ enum Term {
         case Get(t1, field) => Get(t1.replace(y, t), field)
         case Term.As(te, ty) => Term.As(te.replace(y, t), ty.replace(y, t))
 
+    /** similiar to [[replace]], but instead of replacing, `t` is added as in the `tagged` field of the variable
+      * @param y the variable to be tagged
+      * @param t the term to be inserted
+      * @return `this` with tagged variables
+      */
     def tag(y: Int, t: Term): Term = this match
         case Var(x, Some(e)) => 
             if x == y then
@@ -133,6 +165,7 @@ enum Term {
         case Get(t1, field) => Get(t1.tag(y, t), field)
         case Term.As(te, ty) => Term.As(te.tag(y, t), ty.tag(y, t))
 
+    /** removes all tags from the variables */
     def untag: Term = this match
         case Var(x, _) => Var(x, None)
         case Abs(t1) => Abs(t1.untag)
@@ -146,6 +179,7 @@ enum Term {
         case Get(t1, field) => Get(t1.untag, field)
         case Term.As(te, ty) => Term.As(te.untag, ty.untag)
 
+    /** evaluates `this` using the _call-by-value_ strategy */
     def eval: Term = this match
         case Term.App(t1, t2) => (t1.eval, t2.eval) match
             case (Term.Abs(body), arg) => (body.replace(0, arg >> 1) << 1).eval
@@ -160,12 +194,11 @@ enum Term {
         case Var(x, Some(t)) => t
         case _ => this
 
-
-    // contexts and context shifters
+    /** maps indices to types */
     type G = Map[Int, Term]
-    type M = Map[Term, Term]
-    type P = Set[Term]
-    type I = Map[Term, Term] // map von Typen zu Termen (Variablen-Namen oder Module Zugriffe)
+    /** maps types to variabls or module accesses */
+    type I = Map[Term, Term]
+    /** relation between terms */
     type R = Set[(Term, Term)]
 
     extension (self: G) {
@@ -173,22 +206,15 @@ enum Term {
         def >>(amount: Int): G = self.map { case (key, value) => (key + amount, value >> amount) }
     }
 
-    extension (self: M) { // auch für I
-        @targetName("shiftM")
-        def >>(amount: Int): M = self.map { case (key, value) => (key >> amount, value >> amount) }
-    }
-
-    extension (self: P) {
-        @targetName("shiftP")
-        def >>(amount: Int): P = self.map { _ >> amount }
+    extension (self: I) {
+        @targetName("shiftI")
+        def >>(amount: Int): I = self.map { case (key, value) => (key >> amount, value >> amount) }
     }
 
     extension (self: R) { // auch für I
         @targetName("shiftR")
         def >>(amount: Int): R = self.map { case (key, value) => (key >> amount, value >> amount) }
     }
-
-    // equivalence relation
 
     def ===(that: Term): Boolean = this.equivalence(that, Set.empty)
 
@@ -218,9 +244,11 @@ enum Term {
                 case (As(t1, t2), As(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
                 case _ => false
 
-    def matches(shape: Option[Term]): Boolean = shape match
-        case Some(value) => this === value
-        case None => true
+    def matches(shape: Option[Term]): Boolean = 
+        println(s"DEBUG: $this should match $shape")
+        shape match
+            case Some(value) => this === value
+            case None => true
 
     // type checking
 
@@ -231,13 +259,14 @@ enum Term {
         case None => None
 
     def checkWithSearch(ty: Term, shape: Option[Term], i: I): Either[String, (Term, Term)] =
-        val res = if ty matches shape then Right(this, ty) else Left(s"$this does not match $shape")
+        val res = if ty matches shape then Right(this, shape.getOrElse(ty)) else Left(s"$ty does not match $shape")
+        println(s"SEARCH RESULT: $res")
         res.orElse { (ty, shape) match
             case (Imp(t1, t2), shape) =>
                 search(t1, i, i) match
-                    case None => Left(s"$this does not match $shape")
+                    case None => Left(s"$ty does not match $shape")
                     case Some(arg) => checkWithSearch(t2, shape, i).map { (te, ty) => (App(te, arg), ty) }
-            case _ => Left(s"$this does not match $shape")
+            case _ => Left(s"$ty does not match $shape")
         }
 
     /** generates a term and its type from `this` and an expected `shape` of the type
@@ -324,7 +353,8 @@ enum Term {
                 case Get(t, field) => t.transform(g, i, None).flatMap { 
                     case (te, Interface(fields)) => 
                         fields.find(_.ident.exists(_ == field)) match
-                            case Some(IntElem.Named(name, typ)) => Right(Get(te, field), typ)
+                            case Some(IntElem.Named(name, typ)) => 
+                                Get(te, field).checkWithSearch(typ, shape, i)
                             case _ => Left("no '$field' field")
                     case _ => Left("no '$field' field")
                 }
@@ -333,13 +363,13 @@ enum Term {
         case Nil => Right(Module(module.reverse), Interface(interface.reverse))
         case (ModElem.Named(name, term), IntElem.Named(_name, typ)) :: next if name == _name => 
             val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(typ)).flatMap { (te, ty) =>
+            term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(typ.tag(0, Module(module) >> 1))).flatMap { (te, ty) =>
                 checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, i, namer)
             }
         case (ModElem.Imp(typ, term), IntElem.Imp(name, typ2)) :: next if typ === typ2 =>
             val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
             typ.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
-                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(u)).flatMap { (te, ty) =>
+                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(u.tag(0, Module(module) >> 1))).flatMap { (te, ty) =>
                     checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, i, namer)
                 }
             }
@@ -355,7 +385,7 @@ enum Term {
         case ModElem.Imp(typ, term) :: next =>
             val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
             typ.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
-                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(u)).flatMap { (te, ty) =>
+                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(u.tag(0, Module(module) >> 1))).flatMap { (te, ty) =>
                     val name = namer.next()
                     checkModule(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, i, namer)
                 }

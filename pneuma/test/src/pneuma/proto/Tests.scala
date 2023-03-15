@@ -70,4 +70,29 @@ class Tests extends AnyFunSuite {
         assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(teRes, ty))
     }
 
+    test("type operators I") {
+        val te = mod(
+            "op" := \(0),       // \x.x
+            "a" := 0 ! "op"     // this.op ~~> \x.x
+
+        )
+        val ty = int(
+            "op" ::= * --> *,                   // * -> *
+            "a" ::= (0 ! "op") at (* --> *)     // this.op (* -> *)
+        )
+        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(te, ty))
+    }
+
+    test("type operators II") {
+        val te = mod(
+            "op" := \(* --> 1),
+            "a" := 0 ! "op"
+        )
+        val ty = int(
+            "op" ::= * --> *,
+            "a" ::= (0 ! "op") at * 
+        )
+        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(te, ty))
+    }
+
 }

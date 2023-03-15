@@ -1,11 +1,16 @@
 import mill._
 import scalalib._
 
-/* version 0.0.0 -- core */
+/* version 0.0.0 -- core i */
 // TODO module checking with expected shape DONE
 // TODO module insertion preventation -- better module checking algorithm DONE
 // TODO equivalence function DONE
+
+/* version 0.0.0 -- core ii */
+// TODO document everything
 // TODO recheck complete structure
+// TODO rethink the implicit naming conventions
+// TODO make modules recursive
 // TODO testing
 // TODO introduce base types
 
@@ -27,7 +32,7 @@ object pneuma extends ScalaModule {
 
     def name = "Pneuma Language"
     def version = "0.0.0"
-    def scalaVersion = "3.2.1"
+    def scalaVersion = "3.2.2"
     def mainClass = T(Some("lambdacalculus.test"))
     def scalacOptions = Seq("-feature", "-deprecation")
     def ivyDeps = Agg(ivy"org.ow2.asm:asm:9.4")
@@ -41,7 +46,7 @@ object pneuma extends ScalaModule {
 object playground extends ScalaModule {
 
     def version = "0.0.0"
-    def scalaVersion = "3.2.1"
+    def scalaVersion = "3.2.2"
     def mainClass = T(Some("lambdacalculus.test"))
     def scalacOptions = Seq("-feature", "-deprecation")
     def ivyDeps = Agg(ivy"org.ow2.asm:asm:9.4")
