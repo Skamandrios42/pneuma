@@ -25,7 +25,7 @@ class Tests extends AnyFunSuite {
         val te = mod(
             "id" := \(0),
             "te" := \(0 at ?),
-            * ?= *,
+            "imp$0000" ?: * ?= *,
         )
         val ty = int(
             "id" ::= * --> *,

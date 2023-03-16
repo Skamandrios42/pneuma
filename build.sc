@@ -11,9 +11,9 @@ import mill.contrib.scoverage.ScoverageModule
 /* version 0.0.0 -- core ii */
 // TODO document pneuma.proto DONE
 // TODO make modules recursive DONE
-// TODO rethink the implicit naming conventions
-// TODO recheck complete structure
+// TODO rethink the implicit naming conventions DONE
 // TODO testing
+// TODO recheck complete structure
 // TODO introduce base types
 
 /* version 0.0.0 -- infrastructure */

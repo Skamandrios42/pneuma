@@ -23,9 +23,10 @@ object DSL {
         def :=(term: Term) = ModElem.Named(self, term)
         def ::=(term: Term) = IntElem.Named(self, term)
         def ?=(term: Term) = IntElem.Imp(self, term)
+        def ?:(term: Term) = (self, term)
     }
-    extension (self: Term) {
-        def ?=(term: Term) = ModElem.Imp(self, term)
+    extension (self: (String, Term)) {
+        def ?=(term: Term) = ModElem.Imp(self(0), self(1), term)
     }
 
     def mod(defs: ModElem*) = Term.Module(defs.toList)
