@@ -6,6 +6,8 @@ import DSL.{*, given}
 
 class Tests extends AnyFunSuite {
 
+    extension (self: Either[String, (Term, Term)]) def untag = self.map((x, y) => (x.untag, y.untag))
+
     test("miscellaneous") {
         val te = \(\(1 at 0))
         val ty = (* --> *) --> (* --> *)
@@ -35,7 +37,7 @@ class Tests extends AnyFunSuite {
             "te" := \(\(1 at 0)),
             "imp$0000" := *,
         )
-        assert((te.typeCheck(ty)) == Right(teRes, ty))
+        assert((te.typeCheck(ty)).untag == Right(teRes, ty))
     }
 
     test("implicits in modules I") {
@@ -51,7 +53,7 @@ class Tests extends AnyFunSuite {
             "a" := \(0),
             "c" := \((1 ! "a") at 0)
         )
-        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(teRes, ty))
+        assert((te typeCheck ty).untag == Right(teRes, ty))
     }
 
     test("implicits in modules II") {
@@ -67,7 +69,7 @@ class Tests extends AnyFunSuite {
             "a" := \(0),
             "c" := (0 ! "a") at 1
         ))
-        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(teRes, ty))
+        assert((te typeCheck ty).untag == Right(teRes, ty))
     }
 
     test("type operators I") {
@@ -80,7 +82,7 @@ class Tests extends AnyFunSuite {
             "op" ::= * --> *,                   // * -> *
             "a" ::= (0 ! "op") at (* --> *)     // this.op (* -> *)
         )
-        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(te, ty))
+        assert((te typeCheck ty).untag == Right(te, ty))
     }
 
     test("type operators II") {
@@ -92,7 +94,21 @@ class Tests extends AnyFunSuite {
             "op" ::= * --> *,
             "a" ::= (0 ! "op") at * 
         )
-        assert((te typeCheck ty).map((x, y) => (x.untag, y.untag)) == Right(te, ty))
+        assert((te typeCheck ty).untag == Right(te, ty))
+    }
+
+    test("recursion") {
+        val te = mod(
+            "a" := 0 ! "b",
+            "b" := 0 ! "a",
+            "c" := 0 ! "c"
+        )
+        val ty = int(
+            "a" ::= *,
+            "b" ::= *,
+            "c" ::= *
+        )
+        assert((te typeCheck ty).untag == Right(te, ty))
     }
 
 }

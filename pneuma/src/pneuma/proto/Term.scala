@@ -370,7 +370,7 @@ enum Term {
                 // TODO consider shape
                 case Module(fields) => shape match
                     case None => checkModule(fields, Nil, Nil, g >> 1, i >> 1, Namer("imp$"))
-                    case Some(Interface(types)) => checkModuleWithInterface(fields.zip(types), Nil, Nil, g >> 1, i >> 1, Namer("imp$"))
+                    case Some(Interface(types)) => checkModuleWithInterface(fields.zip(types), Nil, Nil, g, i, Namer("imp$"))
                     case Some(_) => Left("you're dumb")
                 // TODO consider shape
                 case Interface(fields) => checkInterface(fields, Nil, g >> 1, i >> 1).flatMap { (te, ty) =>
@@ -390,14 +390,20 @@ enum Term {
     def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, i: I, namer: Namer): Either[String, (Module, Interface)] = fields match
         case Nil => Right(Module(module.reverse), Interface(interface.reverse))
         case (ModElem.Named(name, term), IntElem.Named(_name, typ)) :: next if name == _name => 
-            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(typ.tag(0, Module(module) >> 1))).flatMap { (te, ty) =>
+            val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
+            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val taggedTerm = term.tag(0, Module(module) >> 1)
+            val taggedType = typ.tag(0, Module(module) >> 1)
+            taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
                 checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, i, namer)
             }
         case (ModElem.Imp(typ, term), IntElem.Imp(name, typ2)) :: next if typ === typ2 =>
-            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            typ.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
-                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(u.tag(0, Module(module) >> 1))).flatMap { (te, ty) =>
+            val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
+            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val taggedTerm = term.tag(0, Module(module) >> 1)
+            typ.transform(expContext, impContext, Some(Typ)).flatMap { (u, _) => 
+                val taggedType = u.tag(0, Module(module) >> 1)
+                taggedTerm.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(taggedType)).flatMap { (te, ty) =>
                     checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, i, namer)
                 }
             }
@@ -407,14 +413,19 @@ enum Term {
     def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I, namer: Namer): Either[String, (Module, Interface)] = fields match
         case Nil => Right(Module(module.reverse), Interface(interface.reverse))
         case ModElem.Named(name, term) :: next => 
-            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, None).flatMap { (te, ty) =>
+            val expContext = (g >> 1) + (0 -> Interface(interface))
+            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val taggedTerm = term.tag(0, Module(module) >> 1)
+            taggedTerm.transform(expContext, impContext, None).flatMap { (te, ty) =>
                 checkModule(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, i, namer)
             }
         case ModElem.Imp(typ, term) :: next =>
-            val impContext =  i ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val expContext = (g >> 1) + (0 -> Interface(interface))
+            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val taggedTerm = term.tag(0, Module(module) >> 1)
             typ.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
-                term.tag(0, Module(module) >> 1).transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(u.tag(0, Module(module) >> 1))).flatMap { (te, ty) =>
+                val taggedType = u.tag(0, Module(module) >> 1)
+                taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
                     val name = namer.next()
                     checkModule(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, i, namer)
                 }
@@ -424,13 +435,15 @@ enum Term {
     def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, i: I): Either[String, (Interface, Term.Typ.type)] = fields match
         case Nil => Right(Interface(checked.reverse), Typ)
         case IntElem.Named(name, typ) :: next =>
-            val impContext =  i ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            typ.transform((g >> 1) + (0 -> Interface(checked)), impContext, Some(Typ)).flatMap { (ty, _) => 
+            val expContext = (g >> 1) + (0 -> Interface(fields ++ checked))
+            val impContext =  (i >> 1) ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            typ.transform(expContext, impContext, Some(Typ)).flatMap { (ty, _) => 
                 checkInterface(next, IntElem.Named(name, ty) :: checked, g, i)
             }
         case IntElem.Imp(name, typ) :: next =>
-            val impContext =  i ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            typ.transform((g >> 1) + (0 -> Interface(checked)), impContext, Some(Typ)).flatMap { (ty, _) => 
+            val expContext = (g >> 1) + (0 -> Interface(fields ++ checked))
+            val impContext =  (i >> 1) ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            typ.transform(expContext, impContext, Some(Typ)).flatMap { (ty, _) => 
                 checkInterface(next, IntElem.Imp(name, ty) :: checked, g, i)
             }
 
