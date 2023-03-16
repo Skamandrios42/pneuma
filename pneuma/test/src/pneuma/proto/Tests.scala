@@ -111,4 +111,22 @@ class Tests extends AnyFunSuite {
         assert((te typeCheck ty).untag == Right(te, ty))
     }
 
+    test("naturals") {
+        val te = mod(
+            "sum" := \(\(Term.Match(1,
+                onZero = 0, onSucc = Term.Succ(3 ! "sum" at 0 at 1)
+            ))),
+            "b" := (0 ! "sum") at Term.Nat(42) at Term.Nat(48),
+            "c" := Term.Succ(Term.Nat(42))
+        )
+        val ty = int(
+            "sum" ::= Term.NatType --> (Term.NatType --> Term.NatType),
+            "b" ::= Term.NatType,
+            "c" ::= Term.NatType
+        )
+        assert((te typeCheck ty).untag == Right(te, ty))
+        println((te ! "sum"))
+        println((te ! "b").eval)
+    }
+
 }

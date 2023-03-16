@@ -47,23 +47,30 @@ enum Term {
     case Interface(fields: List[IntElem])
     case Get(t: Term, field: String)
     case As(te: Term, ty: Term)
+    case NatType
+    case Nat(value: Int)
+    case Succ(t: Term)
+    case Match(t: Term, onZero: Term, onSucc: Term)
 
     /** generates a simple string representation of the program */
     override def toString: String = this match
-        case Term.Var(x, Some(t)) => s"$x[$t]"
-        case Term.Var(x, None) => s"$x"
-        case Term.Abs(t) => s"(λ.$t)"
-        case Term.App(t1, t2) => s"($t1 $t2)"
-        case Term.Typ => "*"
-        case Term.Phi => "?"
-        case Term.Pro(t1, t2) => s"(π$t1.$t2)"
-        case Term.Imp(t1, t2) => s"(?$t1.$t2)"
-        case Term.Module(fields) => s"{ ${fields.mkString(", ")} }"
-        case Term.Interface(fields) => s"{ ${fields.mkString(", ")} }"
-        case Term.Get(t, field) => s"($t.$field)"
-        case Term.As(te, ty) => s"($te : $ty)"
+        case Var(x, Some(t)) => s"$x[$t]"
+        case Var(x, None) => s"$x"
+        case Abs(t) => s"(λ.$t)"
+        case App(t1, t2) => s"($t1 $t2)"
+        case Typ => "*"
+        case Phi => "?"
+        case Pro(t1, t2) => s"(π$t1.$t2)"
+        case Imp(t1, t2) => s"(?$t1.$t2)"
+        case Module(fields) => s"{ ${fields.mkString(", ")} }"
+        case Interface(fields) => s"{ ${fields.mkString(", ")} }"
+        case Get(t, field) => s"($t.$field)"
+        case As(te, ty) => s"($te : $ty)"
+        case NatType => "Nat"
+        case Nat(value) => s"n$value"
+        case Succ(t) => s"(S $t)"
+        case Match(t, onZero, onSucc) => s"($t match Z => $onZero, S => $onSucc )"
 
-    
     extension [A](self: List[ModElem]) {
         /** maps f over every occurrence of [[Term]]
           * @param f a function from Term to Term
@@ -105,7 +112,11 @@ enum Term {
         case Module(fields) => Module(fields.mapValues(_.shift(amount, cutoff + 1)))
         case Interface(fields) => Interface(fields.mapValues(_.shift(amount, cutoff + 1)))
         case Get(t, field) => Get(t.shift(amount, cutoff), field)
-        case Term.As(te, ty) => Term.As(te.shift(amount, cutoff), ty.shift(amount, cutoff))
+        case As(te, ty) => Term.As(te.shift(amount, cutoff), ty.shift(amount, cutoff))
+        case NatType => NatType
+        case Nat(value) => Nat(value)
+        case Succ(t) => Succ(t.shift(amount, cutoff))
+        case Match(t, onZero, onSucc) => Match(t.shift(amount, cutoff), onZero.shift(amount, cutoff), onSucc.shift(amount, cutoff + 1))
 
     /** returns [[shift(amount, 0)]] */
     def >>(amount: Int) = shift(amount, 0)
@@ -130,7 +141,11 @@ enum Term {
         case Module(fields) => Module(fields.mapValues(_.replace(y + 1, t >> 1)))
         case Interface(fields) => Interface(fields.mapValues(_.replace(y + 1, t >> 1)))
         case Get(t1, field) => Get(t1.replace(y, t), field)
-        case Term.As(te, ty) => Term.As(te.replace(y, t), ty.replace(y, t))
+        case As(te, ty) => Term.As(te.replace(y, t), ty.replace(y, t))
+        case NatType => NatType
+        case Nat(value) => Term.Nat(value)
+        case Succ(e) => Term.Succ(e.replace(y, t))
+        case Match(e, onZero, onSucc) => Term.Match(e.replace(y, t), onZero.replace(y, t), onSucc.replace(y + 1, t >> 1))
 
     /** similiar to [[replace]], but instead of replacing, `t` is added as in the `tagged` field of the variable
       * @param y the variable to be tagged
@@ -138,11 +153,7 @@ enum Term {
       * @return `this` with tagged variables
       */
     def tag(y: Int, t: Term): Term = this match
-        case Var(x, Some(e)) => 
-            if x == y then
-                println("Warning! Retagged variable!")
-                Var(x, Some(t))
-            else Var(x, Some(e.tag(y, t)))
+        case Var(x, Some(e)) => if x == y then Var(x, Some(t)) else Var(x, Some(e.tag(y, t)))
         case Var(x, None) => if x == y then Var(x, Some(t)) else Var(x, None)
         case Abs(t1) => Abs(t1.tag(y + 1, t >> 1))
         case App(t1, t2) => App(t1.tag(y, t), t2.tag(y, t))
@@ -153,7 +164,11 @@ enum Term {
         case Module(fields) => Module(fields.mapValues(_.tag(y + 1, t >> 1)))
         case Interface(fields) => Interface(fields.mapValues(_.tag(y + 1, t >> 1)))
         case Get(t1, field) => Get(t1.tag(y, t), field)
-        case Term.As(te, ty) => Term.As(te.tag(y, t), ty.tag(y, t))
+        case As(te, ty) => Term.As(te.tag(y, t), ty.tag(y, t))
+        case NatType => NatType
+        case Nat(value) => Nat(value)
+        case Succ(e) => Succ(e.tag(y, t))
+        case Match(t, onZero, onSucc) => Match(t.tag(y, t), onZero.tag(y, t), onSucc.tag(y + 1, t >> 1))
 
     /** removes all tags from the variables */
     def untag: Term = this match
@@ -167,7 +182,12 @@ enum Term {
         case Module(fields) => Module(fields.mapValues(_.untag))
         case Interface(fields) => Interface(fields.mapValues(_.untag))
         case Get(t1, field) => Get(t1.untag, field)
-        case Term.As(te, ty) => Term.As(te.untag, ty.untag)
+        case As(te, ty) => Term.As(te.untag, ty.untag)
+        case NatType => NatType
+        case Nat(value) => Nat(value)
+        case Succ(e) => Succ(e.untag)
+        case Match(t, onZero, onSucc) => Match(t.untag, onZero.untag, onSucc.untag)
+        
 
     /** evaluates `this` using the _call-by-value_ strategy */
     def eval: Term = this match
@@ -182,6 +202,13 @@ enum Term {
             case e => Term.Get(e, field)
         case Term.As(te, ty) => te
         case Var(x, Some(t)) => t
+        case Succ(e) => e.eval match
+            case Nat(value) => Nat(value + 1)
+            case e => e
+        case Match(e, onZero, onSucc) => e.eval match
+            case Nat(0) => onZero.eval
+            case Nat(other) => App(Abs(onSucc), Nat(other - 1)).eval
+            case other => Match(other, onZero, onSucc)
         case _ => this
 
     /** maps indices to types */
@@ -228,7 +255,7 @@ enum Term {
                 case (Abs(t), Abs(e)) => t.equivalence(e, updatedRelation >> 1)
                 case (App(t1, t2), App(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
                 case (Typ, Typ) => true
-                case (Phi, Phi) => ???
+                case (Phi, Phi) => throw new Exception("equivalence should only be called after implicit resolution")
                 case (Pro(t1, t2), Pro(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation >> 1)
                 case (Imp(t1, t2), Imp(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation >> 1)
                 case (Module(ts), Module(es)) => (ts zip es).forall {
@@ -243,6 +270,10 @@ enum Term {
                 }
                 case (Get(t, f1), Get(e, f2)) => f1 == f2 && t.equivalence(e, updatedRelation)
                 case (As(t1, t2), As(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
+                case (NatType, NatType) => true
+                case (Nat(v1), Nat(v2)) => v1 == v2
+                case (Succ(t1), Succ(t2)) => t1.equivalence(t2, updatedRelation)
+                case (Match(t1, z1, s1), Match(t2, z2, s2)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation)
                 case _ => false
 
     /** checks, if this (seen as a type) conforms to the expected shape using [[===]]
@@ -372,6 +403,17 @@ enum Term {
                                 Get(te, field).checkWithSearch(typ, shape, i)
                             case _ => Left("no '$field' field")
                     case _ => Left("no '$field' field")
+                }
+
+                case Nat(value) => if value >= 0 then Right(Nat(value), NatType) else Left("natural numbers are >= 0")
+                case NatType => Right(NatType, Typ)
+                case Succ(t) => t.transform(g, i, Some(NatType)).flatMap((te, ty) => Succ(te).checkWithSearch(NatType, shape, i))
+                case Match(t, onZero, onSucc) => t.transform(g, i, Some(NatType)).flatMap { (te, ty) =>
+                    onZero.transform(g, i, shape).flatMap { (z, zt) => 
+                        onSucc.transform((g >> 1) + (0 -> NatType), i, shape.map(_ >> 1)).flatMap { (s, st) =>
+                            if (zt >> 1) === st then Right(Match(te, z, s), zt) else Left(s"the branches have different types: $zt and $st")
+                        }
+                    }
                 }
 
     /** helper of [[transform]] for checking modules with expected interface */

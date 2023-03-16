@@ -12,9 +12,9 @@ import mill.contrib.scoverage.ScoverageModule
 // TODO document pneuma.proto DONE
 // TODO make modules recursive DONE
 // TODO rethink the implicit naming conventions DONE
+// TODO introduce natural numbers DONE
 // TODO testing
 // TODO recheck complete structure
-// TODO introduce base types
 
 /* version 0.0.0 -- infrastructure */
 // TODO build a parser
