@@ -15,7 +15,7 @@ import mill.contrib.scoverage.ScoverageModule
 // TODO introduce natural numbers DONE
 
 // TODO exact semantics of Ascriptions DONE?
-// TODO need to tag implicit context ?
+// TODO need to tag implicit context DONE?
 // TODO what happens with implicits in types DONE?
 // TODO recheck complete structure
 // TODO extensive testing
@@ -35,6 +35,11 @@ import mill.contrib.scoverage.ScoverageModule
 // TODO inductive datatypes
 // TODO typeclasses for literal macros
 // TODO mutual recursive modules DONE? i think so
+
+// POTENTIAL BUGS
+// shifting
+// missing tags in implicit context
+// wrong type priority in for example ascription
 
 object pneuma extends ScoverageModule {
 

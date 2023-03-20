@@ -164,8 +164,8 @@ class Tests extends AnyFunSuite {
     test("implicits in modules V") {
         val te = mod(
             "a" ?: * ?= Nat,
-            "b" := (0 ! "c"),
-            "c" := nat(42)
+            "b" := nat(42),
+            "c" := (0 ! "b")
         )
         val ty = int(
             "a" ?= *,
@@ -174,8 +174,8 @@ class Tests extends AnyFunSuite {
         )
         val teExp = mod(
             "a" := Nat,
-            "b" := (0 ! "c"),
-            "c" := nat(42)
+            "b" := nat(42),
+            "c" := (0 ! "b")
         )
         val tyExp = int(
             "a" ?= *,

@@ -229,8 +229,6 @@ enum Term {
         /** shifts all elements in the collection by amount */
         @targetName("shiftI")
         def >>(amount: Int): I = self.map { case (key, value) => (key >> amount, value >> amount) }
-        @targetName("tagI")
-        def tag(y: Int, t: Term): I = self.map { case (key, value) => (key, value.tag(y, t)) }
     }
 
     extension (self: R) {
@@ -450,7 +448,6 @@ enum Term {
         case (ModElem.Named(name, term), IntElem.Named(_name, typ)) :: next if name == _name => 
             val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
             val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            //val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }.toMap.tag(0, Module(module) >> 1)
             val taggedTerm = term.tag(0, Module(module) >> 1)
             val taggedType = typ.tag(0, Module(module) >> 1)
             taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
@@ -458,7 +455,6 @@ enum Term {
             }
         case (ModElem.Imp(name_, typ, term), IntElem.Imp(name, typ2)) :: next if typ === typ2 && name == name_ =>
             val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
-            //val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }.toMap.tag(0, Module(module) >> 1)
             val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
             val taggedTerm = term.tag(0, Module(module) >> 1)
             typ.transform(expContext, impContext, Some(Typ)).flatMap { (u, _) => 

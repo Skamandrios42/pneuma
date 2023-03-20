@@ -6,8 +6,9 @@ package pneuma.proto
   */
 class Namer(val base: String) {
     private var index = 0
-    def next() =
+    def next() = synchronized {
         val name = f"$base$index%04d"
         index += 1
         name
+    }
 }
