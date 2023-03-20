@@ -161,6 +161,31 @@ class Tests extends AnyFunSuite {
         assert(te.typeCheck(ty).untag == Right(teExp, tyExp))
     }
 
+    test("implicits in modules V") {
+        val te = mod(
+            "a" ?: * ?= Nat,
+            "b" := (0 ! "c"),
+            "c" := nat(42)
+        )
+        val ty = int(
+            "a" ?= *,
+            "b" ::= ?,
+            "c" ::= Nat
+        )
+        val teExp = mod(
+            "a" := Nat,
+            "b" := (0 ! "c"),
+            "c" := nat(42)
+        )
+        val tyExp = int(
+            "a" ?= *,
+            "b" ::= (0 ! "a"),
+            "c" ::= Nat
+        )
+
+        assert(te.typeCheck(ty).untag == Right(teExp, tyExp))
+    }
+
     test("shifting in module projection") {
         val te = \(\(mod(
             "x" := 1,
