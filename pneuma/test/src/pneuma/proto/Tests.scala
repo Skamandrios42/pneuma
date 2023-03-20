@@ -5,8 +5,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import DSL.{*, given}
 
 // TODO need to tag implicit context
-// TODO specify last bug by explicit example
-// TODO make originally intended test
 
 class Tests extends AnyFunSuite {
 
@@ -91,7 +89,7 @@ class Tests extends AnyFunSuite {
         assert((te typeCheck ty).untag == Right(teRes, ty))
     }
 
-    object ImplicitsInModulesIII {
+    object Example {
         val te = mod(
             "A" := Nat,
             "B" := Nat,
@@ -108,50 +106,41 @@ class Tests extends AnyFunSuite {
             "imp$1" ::= (0 ! "A") --> (1 ! "B"),
             "imp$2" ::= (0 ! "B") --> (1 ! "C"),
         )
-        val testb = \(mod(
-            "imp$0" := (1 ! "a"),
-            "imp$1" ?: ((1 ! "A") -?> (2 ! "B")) ?= (1 ! "imp$1") at ?,
-            "imp$2" ?: ((1 ! "B") -?> (2 ! "C")) ?= (1 ! "imp$2") at ?,
-        ))
-
-        val test = \(mod(
-            "x" := (1 ! "imp$1") at ?,
-            //"imp$0" := (1 ! "a"),
-            //"imp$1" := (1 ! "imp$1") at ?,
-            //"imp$2" := (1 ! "imp$2") at ?,
-        ))
-        
-        val tyst = ty --> int(
-            "x" ::= ((1 ! "A") -?> (2 ! "B")),
-            //"imp$0" ::= (1 ! "A"),
-            //"imp$1" ::= ((1 ! "A") -?> (2 ! "B")),
-            //"imp$2" ::= ((1 ! "B") -?> (2 ! "C")),
-        )
-
-        val expected = \(mod(
-            "x" := \((2 ! "imp$1") at 0),
-        ))
     }
 
     test("implicits in modules III a") {
-        assert((ImplicitsInModulesIII.te typeCheck ImplicitsInModulesIII.ty).untag == Right(ImplicitsInModulesIII.te, ImplicitsInModulesIII.ty))
+        assert((Example.te typeCheck Example.ty).untag == Right(Example.te, Example.ty))
     }
 
     test("implicits in modules III b") {
-        assert((ImplicitsInModulesIII.tyst typeCheck *).untag == Right(ImplicitsInModulesIII.tyst, *))
+        val test = \(mod("x" := (1 ! "imp$1") at ?))
+        val tyst = Example.ty --> int("x" ::= ((1 ! "A") -?> (2 ! "B")))
+        val expected = \(mod("x" := \((2 ! "imp$1") at 0)))
+        assert((test typeCheck tyst).untag == Right(expected, tyst))
     }
 
-    // TODO What exactly should be shifted when checking implicits? 
-    // This test works when (this >> 1) is left out, but then the other test break
     test("implicits in modules III c") {
-        assert((ImplicitsInModulesIII.test typeCheck ImplicitsInModulesIII.tyst).untag == Right(ImplicitsInModulesIII.expected, ImplicitsInModulesIII.tyst))
+        val test = \(mod(
+            "imp$0" ?: (1 ! "A") ?= (1 ! "a"),
+            "imp$1" ?: ((1 ! "A") -?> (2 ! "B")) ?= (1 ! "imp$1") at ?,
+            "imp$2" ?: ((1 ! "B") -?> (2 ! "C")) ?= (1 ! "imp$2") at ?,
+            "res" := ?
+        ))
+        val interface = Example.ty --> int(
+            "imp$0" ?= (1 ! "A"),
+            "imp$1" ?= ((1 ! "A") -?> (2 ! "B")),
+            "imp$2" ?= ((1 ! "B") -?> (2 ! "C")),
+            "res" ::= (1 ! "C")
+        )
+        val expected = \(mod(
+            "imp$0" := (1 ! "a"),
+            "imp$1" := \((2 ! "imp$1") at 0),
+            "imp$2" := \((2 ! "imp$2") at 0),
+            "res" := (0 ! "imp$2") at ((0 ! "imp$1") at (0 ! "imp$0"))
+        ))
+
+        assert((test typeCheck interface).untag == Right(expected, interface))
     }
-
-    //Right(((λ.{ x = (λ.((2.imp$1) 0)) }), (π{ A : *, B : *, C : *, a : (0.A), imp$1 : (π(0.A).(1.B)), imp$2 : (π(0.B).(1.C)) }.{ x : (?(1.A).(2.B)) }))) did not equal 
-    //Right(((λ.{ x = (λ.((2.imp$1) 1)) }), (π{ A : *, B : *, C : *, a : (0.A), imp$1 : (π(0.A).(1.B)), imp$2 : (π(0.B).(1.C)) }.{ x : (?(1.A).(2.B)) })))
-
-    // Right(((λ.{ x = (λ.((2.imp$1) 1)) }), (π{ A : *, B : *, C : *, a : (0.A), imp$1 : (π(0.A).(1.B)), imp$2 : (π(0.B).(1.C)) }.{ x : (?(1.A).(2.B)) }))) did not equal 
-    // Right(((λ.{ x = ((1.imp$1) ?) }),     (π{ A : *, B : *, C : *, a : (0.A), imp$1 : (π(0.A).(1.B)), imp$2 : (π(0.B).(1.C)) }.{ x : (?(1.A).(2.B)) })))
 
     test("type operators I") {
         val te = mod(

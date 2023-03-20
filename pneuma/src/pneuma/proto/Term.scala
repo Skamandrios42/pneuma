@@ -306,8 +306,8 @@ enum Term {
         case None => None
 
     def searchFunction(typ: Term, i: I, all: I): Option[Term] = i.headOption match
-        case Some((Imp(t1, t2), i)) => 
-            println("found implicit function")
+        case Some((Imp(t1, t2), i)) if t2 === (typ >> 1) => 
+            println(s"found implicit function $t1 -> $t2")
             search(t1, all, all).map { arg => App(i, arg) }
         case Some(_) => searchFunction(typ, i.tail, all)
         case None => None
