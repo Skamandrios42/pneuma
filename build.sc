@@ -3,32 +3,34 @@ import mill._
 import scalalib._
 import mill.contrib.scoverage.ScoverageModule
 
-/* version 0.0.0 -- core i */
+/* version 0.0.0 -- core 1 */
 // TODO module checking with expected shape DONE
 // TODO module insertion preventation -- better module checking algorithm DONE
 // TODO equivalence function DONE
 
-/* version 0.0.0 -- core ii */
+/* version 0.0.0 -- core 2 */
 // TODO document pneuma.proto DONE
 // TODO make modules recursive DONE
 // TODO rethink the implicit naming conventions DONE
 // TODO introduce natural numbers DONE
-// TODO testing
 // TODO recheck complete structure
+// TODO extensive testing
 
 /* version 0.0.0 -- infrastructure */
-// TODO build a parser
+// TODO build a parser -- with literals
 // TODO build a bytecode generator
+// TODO make base types
 
 /* version 0.0.0 -- release */
 // TODO initialize repository
 // TODO make publishing setup
 // TODO clean project
+// TODO use ZIO for speedup?
 
 /* version 0.1.0 */
 // TODO inductive datatypes
 // TODO typeclasses for literal macros
-// TODO mutual recursive modules
+// TODO mutual recursive modules DONE? i think so
 
 object pneuma extends ScoverageModule {
 

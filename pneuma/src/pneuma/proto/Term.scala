@@ -107,8 +107,8 @@ enum Term {
         case App(t1, t2) => App(t1.shift(amount, cutoff), t2.shift(amount, cutoff))
         case Typ => Typ
         case Phi => Phi
-        case Pro(t1, t2) => Pro(t1, t2.shift(amount, cutoff + 1))
-        case Imp(t1, t2) => Imp(t1, t2.shift(amount, cutoff + 1))
+        case Pro(t1, t2) => Pro(t1.shift(amount, cutoff), t2.shift(amount, cutoff + 1))
+        case Imp(t1, t2) => Imp(t1.shift(amount, cutoff), t2.shift(amount, cutoff))
         case Module(fields) => Module(fields.mapValues(_.shift(amount, cutoff + 1)))
         case Interface(fields) => Interface(fields.mapValues(_.shift(amount, cutoff + 1)))
         case Get(t, field) => Get(t.shift(amount, cutoff), field)
@@ -228,6 +228,8 @@ enum Term {
         /** shifts all elements in the collection by amount */
         @targetName("shiftI")
         def >>(amount: Int): I = self.map { case (key, value) => (key >> amount, value >> amount) }
+        @targetName("tagI")
+        def tag(y: Int, t: Term): I = self.map { case (key, value) => (key, value.tag(y, t)) }
     }
 
     extension (self: R) {
@@ -293,10 +295,21 @@ enum Term {
       * @param all the complete implicit scope
       * @return the synthesized term of type `typ`
       */
-    def search(typ: Term, i: I, all: I): Option[Term] = i.headOption match
-        case Some(imp, index) if imp === typ => Some(index)
-        case Some((Imp(t1, t2), i)) => search(t1, all, all).map { arg => App(i, arg) }
-        case Some(_) => search(typ, i.tail, all)
+    def search(typ: Term, i: I, all: I): Option[Term] = 
+        searchDirect(typ, i, all).orElse(searchFunction(typ, i, all))
+
+    def searchDirect(typ: Term, i: I, all: I): Option[Term] = i.headOption match
+        case Some(imp, index) if imp === typ => 
+            println("found implicit")
+            Some(index)
+        case Some(_) => searchDirect(typ, i.tail, all)
+        case None => None
+
+    def searchFunction(typ: Term, i: I, all: I): Option[Term] = i.headOption match
+        case Some((Imp(t1, t2), i)) => 
+            println("found implicit function")
+            search(t1, all, all).map { arg => App(i, arg) }
+        case Some(_) => searchFunction(typ, i.tail, all)
         case None => None
 
     /** Checks that `ty` conforms to `shape` up to implicit resolution.
@@ -332,9 +345,10 @@ enum Term {
         else shape.map(_.transform(g, i, Some(Typ)).map(_(0).eval)) match
             // add implicit in context // SHOULD t1 be checked to be nonempty ?
             case Some(Right(Imp(t1, t2))) =>
-                t1.transform(g, i, Some(Typ)).flatMap((t1te, _) =>
-                    (this >> 1).transform(g >> 1, i + (t1te -> Var(0, None)), Some(t2)).map((te, ty) => (Abs(te), Imp(t1, ty)))
+                t1.transform(g, i, Some(Typ)).flatMap((t1te, _) => // SOMETHING IS REALLY WRONG HERE
+                    (this >> 1).transform(g >> 1, (i >> 1) + ((t1te >> 1) -> Var(0, None)), Some(t2)).map((te, ty) => (Abs(te), Imp(t1te, ty)))
                 )
+            case Some(Left(msg)) => Left(s"ERROR $msg")
             // otherwise match on this and apply typechecking rules
             case _           => this match
                 // checks if Typ matches shape
@@ -344,10 +358,12 @@ enum Term {
                     // checks if variable matches shape
                     case Some(value) => Var(x, tag).checkWithSearch(value, shape, i)
                     // report undefined variable type
-                    case None => Left("undefined variable")
+                    case None => Left(s"undefined variable: $this ($g)")
                 // use shape to generate type for abstraction
                 case Abs(t) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2)) =>    // Done SHOULD t1 be checked to be nonempty
+                        println(g)
+                        println(t1)
                         (t.transform((g >> 1) + (0 -> t1), i >> 1, Some(t2))).map { (te, t3) =>
                             (Abs(te), Pro(t1, t3))
                         }
@@ -370,12 +386,15 @@ enum Term {
                     }
                 // search for implicit to match shape
                 case Phi => shape match
-                    case Some(value) => search(value, i, i).map(Right(_, value)).getOrElse(Left(s"no implicit found for $shape"))
+                    case Some(value) => 
+                        println(s"CONTEXT $i SHAPE $value")
+                        // throw new Exception()
+                        search(value, i, i).map(Right(_, value)).getOrElse(Left(s"no implicit found for $shape"))
                     case None => Left(s"no implicit found for $shape")
                 // parameter and result should be a type
                 case Imp(t1, t2) =>
                     t1.transform(g, i, Some(Typ)).flatMap { (u1, _) =>
-                        t2.transform(g, i + (t1 -> Var(0, None)), Some(Typ)).flatMap { (u2, _) =>
+                        t2.transform(g >> 1, (i >> 1) + (t1 -> Var(0, None)), Some(Typ)).flatMap { (u2, _) =>
                             Imp(u1, u2).checkWithSearch(Typ, shape, i)
                         }
                     }
@@ -388,11 +407,11 @@ enum Term {
 
                 // TODO consider shape
                 case Module(fields) => shape match
-                    case None => checkModule(fields, Nil, Nil, g >> 1, i >> 1)
+                    case None => checkModule(fields, Nil, Nil, g, i)
                     case Some(Interface(types)) => checkModuleWithInterface(fields.zip(types), Nil, Nil, g, i)
                     case Some(_) => Left("you're dumb")
                 // TODO consider shape
-                case Interface(fields) => checkInterface(fields, Nil, g >> 1, i >> 1).flatMap { (te, ty) =>
+                case Interface(fields) => checkInterface(fields, Nil, g, i).flatMap { (te, ty) =>
                     te.checkWithSearch(ty, shape, i)
                 }
 
@@ -400,9 +419,10 @@ enum Term {
                     case (te, Interface(fields)) => 
                         fields.find(_.ident.exists(_ == field)) match
                             case Some(IntElem.Named(name, typ)) => 
-                                Get(te, field).checkWithSearch(typ, shape, i)
-                            case _ => Left("no '$field' field")
-                    case _ => Left("no '$field' field")
+                                println(s"$typ -- $shape [${g.mkString(", ")}]")
+                                Get(te, field).checkWithSearch(typ.replace(0, te), shape, i)
+                            case _ => Left(s"$fields has no '$field' field")
+                    case _ => Left(s"no '$field' field")
                 }
 
                 case Nat(value) => if value >= 0 then Right(Nat(value), NatType) else Left("natural numbers are >= 0")
@@ -422,19 +442,21 @@ enum Term {
         case (ModElem.Named(name, term), IntElem.Named(_name, typ)) :: next if name == _name => 
             val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
             val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            //val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }.toMap.tag(0, Module(module) >> 1)
             val taggedTerm = term.tag(0, Module(module) >> 1)
             val taggedType = typ.tag(0, Module(module) >> 1)
             taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
-                checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, i)
+                checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Named(name, typ) :: interface, g, i)
             }
         case (ModElem.Imp(name_, typ, term), IntElem.Imp(name, typ2)) :: next if typ === typ2 && name == name_ =>
             val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
+            //val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }.toMap.tag(0, Module(module) >> 1)
             val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
             val taggedTerm = term.tag(0, Module(module) >> 1)
             typ.transform(expContext, impContext, Some(Typ)).flatMap { (u, _) => 
                 val taggedType = u.tag(0, Module(module) >> 1)
                 taggedTerm.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(taggedType)).flatMap { (te, ty) =>
-                    checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, i)
+                    checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, typ) :: interface, g, i)
                 }
             }
         case _ => Left("Type not matching!")

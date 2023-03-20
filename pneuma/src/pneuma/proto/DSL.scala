@@ -9,7 +9,10 @@ object DSL {
     given Conversion[Int, Term.Var] = Term.Var(_, None)
     val ? = Term.Phi
     val * = Term.Typ
-
+    inline def nat(inline value: Int) = 
+        inline if value >= 0 then Term.Nat(value) else compiletime.error("natural numbers should be non-negative")
+    def Nat = Term.NatType
+    
     extension (self: Term) {
         def apply(term: Term) = Term.App(self, term)
         def at(term: Term) = Term.App(self, term)
@@ -17,6 +20,8 @@ object DSL {
         def -->(term: Term) = Term.Pro(self, term)
         def -?>(term: Term) = Term.Imp(self, term)
         def !(field: String) = Term.Get(self, field)
+        def succ = Term.Succ(self)
+        def pattern(onZero: Term, onSucc: Term) = Term.Match(self, onZero, onSucc)
     }
 
     extension (self: String) {
