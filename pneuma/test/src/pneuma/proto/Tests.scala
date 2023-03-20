@@ -162,15 +162,14 @@ class Tests extends AnyFunSuite {
     }
 
     test("shifting in module projection") {
-        val te = \(mod(
+        val te = \(\(mod(
             "x" := 1,
             "y" := (0 ! "x"),
+        )))
+        val ty = * --> (0 --> int(
+            "x" ::= (\(0) as (* --> *)) at 2,
+            "y" ::= 2,
         ))
-        val ty = Nat --> int(
-            "x" ::= Nat,
-            "y" ::= (\(Nat) as (Nat --> *)) at 1,
-        )
-        //assert((\(Nat) as (Nat --> *)).typeCheck == Right(\(Nat), Nat --> *))
         assert(te.typeCheck(ty).untag == Right(te, ty))
     }
 

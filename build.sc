@@ -14,9 +14,9 @@ import mill.contrib.scoverage.ScoverageModule
 // TODO rethink the implicit naming conventions DONE
 // TODO introduce natural numbers DONE
 
-// TODO exact semantics of Ascriptions
+// TODO exact semantics of Ascriptions DONE?
 // TODO need to tag implicit context ?
-// TODO what happens with implicits in types ?
+// TODO what happens with implicits in types DONE?
 // TODO recheck complete structure
 // TODO extensive testing
 

@@ -367,9 +367,8 @@ enum Term {
                 // use shape to generate type for abstraction
                 case Abs(t) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2)) =>    // Done SHOULD t1 be checked to be nonempty
-                        println(g)
-                        println(t1)
-                        (t.transform((g >> 1) + (0 -> t1), i >> 1, Some(t2))).map { (te, t3) =>
+                        println(s"-->> $g -- $t1")
+                        (t.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, Some(t2))).map { (te, t3) =>
                             (Abs(te), Pro(t1, t3))
                         }
                     case Some(other) => Left(s"product type neccessary to type check abstraction ${Abs(t)} but found $other")
@@ -386,7 +385,7 @@ enum Term {
                 // parameter and result should be a type
                 case Pro(t1, t2) =>
                     t1.transform(g, i, Some(Typ)).flatMap { (u1, _) =>
-                        t2.transform((g >> 1) + (0 -> t1), i >> 1, Some(Typ)).flatMap { (u2, _) =>
+                        t2.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, Some(Typ)).flatMap { (u2, _) =>
                             Pro(u1, u2).checkWithSearch(Typ, shape, i)
                         }
                     }
@@ -409,17 +408,14 @@ enum Term {
                 //     ue.checkWithSearch(uy, shape.orElse(Some(ty)), i)
                 // }
                 case As(te, ty) => te.transform(g, i, Some(ty)).flatMap { (ue, uy) =>
-                    As(ue, uy).checkWithSearch(uy, shape.orElse(Some(ty)), i)
+                    As(ue, ty).checkWithSearch(uy, shape.orElse(Some(ty)), i)
                 }
 
-                //case mod: Module if m contains mod => Right(mod, m(mod))
-
-                // TODO consider shape
                 case Module(fields) => shape match
                     case None => checkModule(fields, Nil, Nil, g, i)
                     case Some(Interface(types)) => checkModuleWithInterface(fields.zip(types), Nil, Nil, g, i)
                     case Some(_) => Left("you're dumb")
-                // TODO consider shape
+
                 case Interface(fields) => checkInterface(fields, Nil, g, i).flatMap { (te, ty) =>
                     te.checkWithSearch(ty, shape, i)
                 }
@@ -429,10 +425,10 @@ enum Term {
                         fields.find(_.ident.exists(_ == field)) match
                             case Some(IntElem.Named(name, typ)) => 
                                 println(s"$typ -- $shape [${g.mkString(", ")}]")
-                                Get(te, field).checkWithSearch(typ.replace(0, te >> 1) << 1, shape, i)
-                            case Some(IntElem.Imp(name, typ)) => 
+                                Get(te, field).checkWithSearch(typ.replace(0, te), shape, i) // should `te` be shifted?
+                            case Some(IntElem.Imp(name, typ)) =>
                                 println(s"$typ -- $shape [${g.mkString(", ")}]")
-                                Get(te, field).checkWithSearch(typ.replace(0, te >> 1) << 1, shape, i)
+                                Get(te, field).checkWithSearch(typ.replace(0, te), shape, i)
                             case _ => Left(s"$fields has no '$field' field")
                     case _ => Left(s"no '$field' field")
                 }
