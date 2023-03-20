@@ -7,10 +7,10 @@ enum ModElem {
     case Named(name: String, term: Term)
     case Imp(name: String, typ: Term, term: Term)
 
-    /** @return the name, if this is [[ModElem.Named]] */
+    /** @return the name */
     def ident = this match
         case Named(name, term) => Some(name)
-        case Imp(name, typ, term) => None
+        case Imp(name, typ, term) => Some(name)
 
     override def toString(): String = this match
         case Named(name, term) => s"$name = $term"
@@ -22,10 +22,10 @@ enum IntElem {
     case Named(name: String, typ: Term)
     case Imp(name: String, typ: Term)
 
-    /** @return the name, if this is [[IntElem.Named]] */
+    /** @return the name */
     def ident = this match
         case Named(name, term) => Some(name)
-        case Imp(name, typ) => None
+        case Imp(name, typ) => Some(name)
 
     override def toString(): String = this match
         case Named(name, term) => s"$name : $term"
@@ -198,6 +198,7 @@ enum Term {
             case mod @ Module(fields) => 
                 fields.find(_.ident.exists(_ == field)) match
                     case Some(ModElem.Named(_, value)) => (value.replace(0, mod >> 1) << 1).eval
+                    case Some(ModElem.Imp(_, _, value)) => (value.replace(0, mod >> 1) << 1).eval
                     case _ => Term.Get(mod, field)
             case e => Term.Get(e, field)
         case Term.As(te, ty) => te
@@ -350,7 +351,11 @@ enum Term {
                 )
             case Some(Left(msg)) => Left(s"ERROR $msg")
             // otherwise match on this and apply typechecking rules
-            case _           => this match
+            case e          => 
+                val shape = e.collect {
+                    case Right(x) => x
+                }
+                this match
                 // checks if Typ matches shape
                 case Typ => Typ.checkWithSearch(Typ, shape, i)
                 // get type from context
@@ -367,7 +372,8 @@ enum Term {
                         (t.transform((g >> 1) + (0 -> t1), i >> 1, Some(t2))).map { (te, t3) =>
                             (Abs(te), Pro(t1, t3))
                         }
-                    case _ => Left("type neccessary to type check abstraction")
+                    case Some(other) => Left(s"product type neccessary to type check abstraction ${Abs(t)} but found $other")
+                    case _ => Left(s"type neccessary to type check abstraction ${Abs(t)}")
                 // typecheck t1 and use the result to typecheck t2
                 case App(t1, t2) =>
                     t1.transform(g, i, None).flatMap {
@@ -399,8 +405,11 @@ enum Term {
                         }
                     }
                 // check te against ty and then verify the shape
+                // case As(te, ty) => te.transform(g, i, Some(ty)).flatMap { (ue, uy) =>
+                //     ue.checkWithSearch(uy, shape.orElse(Some(ty)), i)
+                // }
                 case As(te, ty) => te.transform(g, i, Some(ty)).flatMap { (ue, uy) =>
-                    ue.checkWithSearch(uy, shape, i)
+                    As(ue, uy).checkWithSearch(uy, shape.orElse(Some(ty)), i)
                 }
 
                 //case mod: Module if m contains mod => Right(mod, m(mod))
@@ -420,7 +429,10 @@ enum Term {
                         fields.find(_.ident.exists(_ == field)) match
                             case Some(IntElem.Named(name, typ)) => 
                                 println(s"$typ -- $shape [${g.mkString(", ")}]")
-                                Get(te, field).checkWithSearch(typ.replace(0, te), shape, i)
+                                Get(te, field).checkWithSearch(typ.replace(0, te >> 1) << 1, shape, i)
+                            case Some(IntElem.Imp(name, typ)) => 
+                                println(s"$typ -- $shape [${g.mkString(", ")}]")
+                                Get(te, field).checkWithSearch(typ.replace(0, te >> 1) << 1, shape, i)
                             case _ => Left(s"$fields has no '$field' field")
                     case _ => Left(s"no '$field' field")
                 }

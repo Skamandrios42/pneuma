@@ -4,8 +4,6 @@ import scala.language.implicitConversions
 import org.scalatest.funsuite.AnyFunSuite
 import DSL.{*, given}
 
-// TODO need to tag implicit context
-
 class Tests extends AnyFunSuite {
 
     extension (self: Either[String, (Term, Term)]) def untag = self.map((x, y) => (x.untag, y.untag))
@@ -140,6 +138,53 @@ class Tests extends AnyFunSuite {
         ))
 
         assert((test typeCheck interface).untag == Right(expected, interface))
+    }
+
+    test("implicits in modules IV") {
+        val te = mod(
+            "a" ?: * ?= Nat,
+            "b" := nat(42)
+        )
+        val ty = int(
+            "a" ?= *,
+            "b" ::= ?,
+        )
+        val teExp = mod(
+            "a" := Nat,
+            "b" := nat(42)
+        )
+        val tyExp = int(
+            "a" ?= *,
+            "b" ::= (0 ! "a"),
+        )
+
+        assert(te.typeCheck(ty).untag == Right(teExp, tyExp))
+    }
+
+    test("shifting in module projection") {
+        val te = \(mod(
+            "x" := 1,
+            "y" := (0 ! "x"),
+        ))
+        val ty = Nat --> int(
+            "x" ::= Nat,
+            "y" ::= (\(Nat) as (Nat --> *)) at 1,
+        )
+        //assert((\(Nat) as (Nat --> *)).typeCheck == Right(\(Nat), Nat --> *))
+        assert(te.typeCheck(ty).untag == Right(te, ty))
+    }
+
+    test("ascriptions") {
+        val te = mod(
+            "A" := Nat,
+            "a" := nat(0) as (0 ! "A")
+        )
+        val ty = int(
+            "A" ::= *, 
+            "a" ::= (0 ! "A")
+        )
+        println(te.typeCheck.untag)
+        assert(te.typeCheck.untag == Right(te, ty))
     }
 
     test("type operators I") {
