@@ -2,34 +2,18 @@ package pneuma.proto
 
 import scala.annotation.targetName
 
-/** a definition in a module; either a [[ModElem.Named named]] or an [[ModElem.Imp implicit]] definition */
-enum ModElem {
-    case Named(name: String, term: Term)
-    case Imp(name: String, typ: Term, term: Term)
+enum Mode { case Exp, Imp }
 
-    /** @return the name */
-    def ident = this match
-        case Named(name, term) => Some(name)
-        case Imp(name, typ, term) => Some(name)
-
-    override def toString(): String = this match
-        case Named(name, term) => s"$name = $term"
-        case Imp(name, typ, term) => s"name ?: $typ = $term"
+case class ModElem(name: String, term: Term, mode: Mode) {
+    override def toString(): String = mode match
+        case Mode.Exp => s"$name  = $term"
+        case Mode.Imp => s"? $name = $term"
 }
 
-/** a definitions type in an interface; either for [[IntElem.Named named]] or for [[IntElem.Imp implicit]] definitions */
-enum IntElem {
-    case Named(name: String, typ: Term)
-    case Imp(name: String, typ: Term)
-
-    /** @return the name */
-    def ident = this match
-        case Named(name, term) => Some(name)
-        case Imp(name, typ) => Some(name)
-
-    override def toString(): String = this match
-        case Named(name, term) => s"$name : $term"
-        case Imp(name, typ) => s"$name ?: $typ"
+case class IntElem(name: String, term: Term, mode: Mode) {
+    override def toString(): String = mode match
+        case Mode.Exp => s"$name : $term"
+        case Mode.Imp => s"? $name : $term"
 }
 
 /** The abstract syntax tree representation of a pneuma program 
@@ -78,8 +62,7 @@ enum Term {
           */
         @targetName("mapValuesModElem")
         def mapValues(f: Term => Term) = self.map {
-            case ModElem.Named(name, term) => ModElem.Named(name, f(term))
-            case ModElem.Imp(name, typ, term) => ModElem.Imp(name, f(typ), f(term))
+            case ModElem(name, term, mode) => ModElem(name, f(term), mode)
         }
     }
 
@@ -90,8 +73,7 @@ enum Term {
           */
         @targetName("mapValuesIntElem")
         def mapValues(f: Term => Term) = self.map {
-            case IntElem.Named(name, term) => IntElem.Named(name, f(term))
-            case IntElem.Imp(name, typ) => IntElem.Imp(name, f(typ))
+            case IntElem(name, term, mode) => IntElem(name, f(term), mode)
         }
     }
 
@@ -196,9 +178,8 @@ enum Term {
             case (abs, arg) => Term.App(abs, arg)
         case Term.Get(t, field) => t.eval match
             case mod @ Module(fields) => 
-                fields.find(_.ident.exists(_ == field)) match
-                    case Some(ModElem.Named(_, value)) => (value.replace(0, mod >> 1) << 1).eval
-                    case Some(ModElem.Imp(_, _, value)) => (value.replace(0, mod >> 1) << 1).eval
+                fields.find(_.name == field) match
+                    case Some(ModElem(_, value, _)) => (value.replace(0, mod >> 1) << 1).eval
                     case _ => Term.Get(mod, field)
             case e => Term.Get(e, field)
         case Term.As(te, ty) => te
@@ -260,14 +241,10 @@ enum Term {
                 case (Pro(t1, t2), Pro(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation >> 1)
                 case (Imp(t1, t2), Imp(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation >> 1)
                 case (Module(ts), Module(es)) => (ts zip es).forall {
-                    case (ModElem.Named(s1, t), ModElem.Named(s2, e)) => s1 == s2 && t.equivalence(e, updatedRelation >> 1)
-                    case (ModElem.Imp(s1, t1, t2), ModElem.Imp(s2, e1, e2)) => s1 == s2 &&  t1.equivalence(e1, updatedRelation >> 1) && t2.equivalence(e2, updatedRelation >> 1)
-                    case _ => false
+                    case (ModElem(s1, t1, m1), ModElem(s2, t2, m2)) => s1 == s2 && m1 == m2 && t1.equivalence(t2, updatedRelation >> 1)
                 }
                 case (Interface(ts), Interface(es)) => (ts zip es).forall {
-                    case (IntElem.Named(s1, t), IntElem.Named(s2, e)) => s1 == s2 && t.equivalence(e, updatedRelation >> 1)
-                    case (IntElem.Imp(s1, t), IntElem.Imp(s2, e)) => s1 == s2 && t.equivalence(e, updatedRelation >> 1)
-                    case _ => false
+                    case (IntElem(s1, t1, m1), IntElem(s2, t2, m2)) => s1 == s2 && m1 == m2 && t1.equivalence(t2, updatedRelation >> 1)
                 }
                 case (Get(t, f1), Get(e, f2)) => f1 == f2 && t.equivalence(e, updatedRelation)
                 case (As(t1, t2), As(e1, e2)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
@@ -420,13 +397,10 @@ enum Term {
 
                 case Get(t, field) => t.transform(g, i, None).flatMap { 
                     case (te, Interface(fields)) => 
-                        fields.find(_.ident.exists(_ == field)) match
-                            case Some(IntElem.Named(name, typ)) => 
+                        fields.find(_.name == field) match
+                            case Some(IntElem(name, typ, mode)) => 
                                 println(s"$typ -- $shape [${g.mkString(", ")}]")
                                 Get(te, field).checkWithSearch(typ.replace(0, te), shape, i) // should `te` be shifted?
-                            case Some(IntElem.Imp(name, typ)) =>
-                                println(s"$typ -- $shape [${g.mkString(", ")}]")
-                                Get(te, field).checkWithSearch(typ.replace(0, te), shape, i)
                             case _ => Left(s"$fields has no '$field' field")
                     case _ => Left(s"no '$field' field")
                 }
@@ -445,61 +419,35 @@ enum Term {
     /** helper of [[transform]] for checking modules with expected interface */
     def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, i: I): Either[String, (Module, Interface)] = fields match
         case Nil => Right(Module(module.reverse), Interface(interface.reverse))
-        case (ModElem.Named(name, term), IntElem.Named(_name, typ)) :: next if name == _name => 
+        case (ModElem(name, term, mode), IntElem(name1, typ, mode1)) :: next if name == name1 && mode == mode1 => 
             val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None), name)) }
             val taggedTerm = term.tag(0, Module(module) >> 1)
             val taggedType = typ.tag(0, Module(module) >> 1)
             taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
-                checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Named(name, typ) :: interface, g, i)
+                checkModuleWithInterface(next, ModElem(name, te, mode) :: module, IntElem(name, typ, mode) :: interface, g, i)
             }
-        case (ModElem.Imp(name_, typ, term), IntElem.Imp(name, typ2)) :: next if typ === typ2 && name == name_ =>
-            val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            val taggedTerm = term.tag(0, Module(module) >> 1)
-            typ.transform(expContext, impContext, Some(Typ)).flatMap { (u, _) => 
-                val taggedType = u.tag(0, Module(module) >> 1)
-                taggedTerm.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(taggedType)).flatMap { (te, ty) =>
-                    checkModuleWithInterface(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, typ) :: interface, g, i)
-                }
-            }
-        case _ => Left("Type not matching!")
+        case (ModElem(_, _, teMode), IntElem(_, _, tyMode)) :: _ => Left(s"found $teMode for $tyMode")
     
     /** helper of [[transform]] for checking modules without expected interface */
     def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I): Either[String, (Module, Interface)] = fields match
         case Nil => Right(Module(module.reverse), Interface(interface.reverse))
-        case ModElem.Named(name, term) :: next => 
+        case ModElem(name, term, mode) :: next => 
             val expContext = (g >> 1) + (0 -> Interface(interface))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None), name)) }
             val taggedTerm = term.tag(0, Module(module) >> 1)
             taggedTerm.transform(expContext, impContext, None).flatMap { (te, ty) =>
-                checkModule(next, ModElem.Named(name, te) :: module, IntElem.Named(name, ty) :: interface, g, i)
-            }
-        case ModElem.Imp(name, typ, term) :: next =>
-            val expContext = (g >> 1) + (0 -> Interface(interface))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            val taggedTerm = term.tag(0, Module(module) >> 1)
-            typ.transform((g >> 1) + (0 -> Interface(interface)), impContext, Some(Typ)).flatMap { (u, _) => 
-                val taggedType = u.tag(0, Module(module) >> 1)
-                taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
-                    checkModule(next, ModElem.Named(name, te) :: module, IntElem.Imp(name, ty) :: interface, g, i)
-                }
+                checkModule(next, ModElem(name, te, mode) :: module, IntElem(name, ty, mode) :: interface, g, i)
             }
 
     /** helper of [[transform]] for checking interfaces */
     def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, i: I): Either[String, (Interface, Term.Typ.type)] = fields match
         case Nil => Right(Interface(checked.reverse), Typ)
-        case IntElem.Named(name, typ) :: next =>
+        case IntElem(name, typ, mode) :: next =>
             val expContext = (g >> 1) + (0 -> Interface(fields ++ checked))
-            val impContext =  (i >> 1) ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
+            val impContext =  (i >> 1) ++ checked.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None), name)) }
             typ.transform(expContext, impContext, Some(Typ)).flatMap { (ty, _) => 
-                checkInterface(next, IntElem.Named(name, ty) :: checked, g, i)
-            }
-        case IntElem.Imp(name, typ) :: next =>
-            val expContext = (g >> 1) + (0 -> Interface(fields ++ checked))
-            val impContext =  (i >> 1) ++ checked.collect { case IntElem.Imp(name, typ) => (typ, Get(Var(0, None), name)) }
-            typ.transform(expContext, impContext, Some(Typ)).flatMap { (ty, _) => 
-                checkInterface(next, IntElem.Imp(name, ty) :: checked, g, i)
+                checkInterface(next, IntElem(name, ty, mode) :: checked, g, i)
             }
 
     /** alias for [[transform transform(Map.empty, Map.empty, None)]] */

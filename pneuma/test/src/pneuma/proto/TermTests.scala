@@ -40,17 +40,17 @@ class TermTests extends AnyFunSuite {
         val te = mod(
             "id" := \(0),
             "te" := \(0 at ?),
-            "imp$0000" ?: * ?= *,
+            "imp$0000" :?= *,
         )
         val ty = int(
             "id" ::= * --> *,
             "te" ::= (* --> *) --> (* -?> *),
-            "imp$0000" ?= *,
+            "imp$0000" ::?= *,
         )
         val teRes = mod(
             "id" := \(0),
             "te" := \(\(1 at 0)),
-            "imp$0000" := *,
+            "imp$0000" :?= *,
         )
         assert((te.typeCheck(ty)).untag == Right(teRes, ty))
     }
@@ -119,21 +119,21 @@ class TermTests extends AnyFunSuite {
 
     test("implicits in modules III c") {
         val test = \(mod(
-            "imp$0" ?: (1 ! "A") ?= (1 ! "a"),
-            "imp$1" ?: ((1 ! "A") -?> (2 ! "B")) ?= (1 ! "imp$1") at ?,
-            "imp$2" ?: ((1 ! "B") -?> (2 ! "C")) ?= (1 ! "imp$2") at ?,
+            "imp$0" :?= (1 ! "a"),
+            "imp$1" :?= (1 ! "imp$1") at ?,
+            "imp$2" :?= (1 ! "imp$2") at ?,
             "res" := ?
         ))
         val interface = Example.ty --> int(
-            "imp$0" ?= (1 ! "A"),
-            "imp$1" ?= ((1 ! "A") -?> (2 ! "B")),
-            "imp$2" ?= ((1 ! "B") -?> (2 ! "C")),
+            "imp$0" ::?= (1 ! "A"),
+            "imp$1" ::?= ((1 ! "A") -?> (2 ! "B")),
+            "imp$2" ::?= ((1 ! "B") -?> (2 ! "C")),
             "res" ::= (1 ! "C")
         )
         val expected = \(mod(
-            "imp$0" := (1 ! "a"),
-            "imp$1" := \((2 ! "imp$1") at 0),
-            "imp$2" := \((2 ! "imp$2") at 0),
+            "imp$0" :?= (1 ! "a"),
+            "imp$1" :?= \((2 ! "imp$1") at 0),
+            "imp$2" :?= \((2 ! "imp$2") at 0),
             "res" := (0 ! "imp$2") at ((0 ! "imp$1") at (0 ! "imp$0"))
         ))
 
@@ -142,19 +142,19 @@ class TermTests extends AnyFunSuite {
 
     test("implicits in modules IV") {
         val te = mod(
-            "a" ?: * ?= Nat,
+            "a" :?= Nat,
             "b" := nat(42)
         )
         val ty = int(
-            "a" ?= *,
+            "a" ::?= *,
             "b" ::= ?,
         )
         val teExp = mod(
-            "a" := Nat,
+            "a" :?= Nat,
             "b" := nat(42)
         )
         val tyExp = int(
-            "a" ?= *,
+            "a" ::?= *,
             "b" ::= (0 ! "a"),
         )
 
@@ -163,22 +163,22 @@ class TermTests extends AnyFunSuite {
 
     test("implicits in modules V") {
         val te = mod(
-            "a" ?: * ?= Nat,
+            "a" :?= Nat,
             "b" := nat(42),
             "c" := (0 ! "b")
         )
         val ty = int(
-            "a" ?= *,
+            "a" ::?= *,
             "b" ::= ?,
             "c" ::= Nat
         )
         val teExp = mod(
-            "a" := Nat,
+            "a" :?= Nat,
             "b" := nat(42),
             "c" := (0 ! "b")
         )
         val tyExp = int(
-            "a" ?= *,
+            "a" ::?= *,
             "b" ::= (0 ! "a"),
             "c" ::= Nat
         )

@@ -1,20 +1,20 @@
 package pneuma.proto
 
 import scala.language.implicitConversions
-    import parsing.Parser
-    import parsing.Parser.Result
-    import parsing.StringParsers.{*, given}
+import parsing.Parser
+import parsing.Parser.Result
+import parsing.StringParsers.{*, given}
 
 object PneumaParser {
 
     enum ModElem {
         case Named(name: String, term: Program)
-        case Imp(typ: Program, term: Program)
+        case Imp(name: String, term: Program)
     }
 
     enum IntElem {
         case Named(name: String, typ: Program)
-        case Imp(typ: Program)
+        case Imp(name: String, typ: Program)
     }
 
     enum Program {
@@ -38,28 +38,31 @@ object PneumaParser {
 
     extension (self: Map[String, Int]) def >>(amount: Int) = self.map((s, i) => (s, i + amount))
 
-    def convert(program: Program, ctx: Map[String, Int]): Term = program match
-        case Program.Var(x) => Term.Var(ctx(x), None)
-        case Program.Abs(x, t) => Term.Abs(convert(t, (ctx >> 1) + (x -> 0)))
-        case Program.App(t1, t2) => Term.App(convert(t1, ctx), convert(t2, ctx))
-        case Program.Typ => Term.Typ
-        case Program.Phi => Term.Phi
-        case Program.Pro(x, t1, t2) => Term.Pro(convert(t1, ctx), convert(t2, (ctx >> 1) + (x -> 0)))
-        case Program.Imp(t1, t2) => Term.Imp(convert(t1, ctx), convert(t2, ctx >> 1))
-        case Program.Module(fields) => Term.Module(fields.map {
-            case ModElem.Named(name, term) => pneuma.proto.ModElem.Named(name, convert(term, (ctx >> 1) + ("this" -> 0)))
-            case ModElem.Imp(typ, term) => pneuma.proto.ModElem.Imp("", convert(typ, ctx), convert(term,  (ctx >> 1) + ("this" -> 0)))
-        })
-        case Program.Interface(fields) => Term.Interface(fields.map {
-            case IntElem.Named(name, term) => pneuma.proto.IntElem.Named(name, convert(term,  (ctx >> 1) + ("this" -> 0)))
-            case IntElem.Imp(typ) => pneuma.proto.IntElem.Imp("", convert(typ,  (ctx >> 1) + ("this" -> 0)))
-        })
-        case Program.Get(t, field) => Term.Get(convert(t, ctx), field)
-        case Program.As(te, ty) => Term.As(convert(te, ctx), convert(ty, ctx))
-        case Program.NatType => Term.NatType
-        case Program.Nat(value) => Term.Nat(value)
-        case Program.Succ(t) => Term.Succ(convert(t, ctx))
-        case Program.Match(t, onZero, onSucc) => Term.Match(convert(t, ctx), convert(onZero, ctx), convert(onSucc, ctx))
+    def convert(program: Program, ctx: Map[String, Int]): Either[String, Term] = program match
+        case Program.Var(x) if ctx.contains(x) => Right(Term.Var(ctx(x), None))
+        case Program.Var(x) => Left(s"undefined variable $x")
+        case Program.Abs(x, t) => convert(t, (ctx >> 1) + (x -> 0)).map(Term.Abs(_))
+        case Program.App(t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx).map(b => Term.App(a, b)))
+        case Program.Typ => Right(Term.Typ)
+        case Program.Phi => Right(Term.Phi)
+        case Program.Pro(x, t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, (ctx >> 1) + (x -> 0)).map(b => Term.Pro(a, b)))
+        case Program.Imp(t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx >> 1).map(b => Term.Imp(a, b)))
+        case Program.Module(fields) => fields.foldLeft[Either[String, List[pneuma.proto.ModElem]]](Right(Nil)) { 
+            case (Right(xs), ModElem.Named(name, term)) => convert(term, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.ModElem(name, _, Mode.Exp) :: xs)
+            case (Right(xs), ModElem.Imp(name, term))   => convert(term, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.ModElem(name, _, Mode.Imp) :: xs)
+            case (Left(msg), _) => Left(msg)
+        }.map(Term.Module(_))
+        case Program.Interface(fields) => fields.foldLeft[Either[String, List[pneuma.proto.IntElem]]](Right(Nil)) { 
+            case (Right(xs), IntElem.Named(name, typ)) => convert(typ, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.IntElem(name, _, Mode.Exp) :: xs)
+            case (Right(xs), IntElem.Imp(name, typ))   => convert(typ, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.IntElem(name, _, Mode.Imp) :: xs)
+            case (Left(msg), _) => Left(msg)
+        }.map(Term.Interface(_))
+        case Program.Get(t, field) => convert(t, ctx).map(Term.Get(_, field))
+        case Program.As(te, ty) => convert(te, ctx).flatMap(a => convert(ty, ctx).map(b => Term.As(a, b)))
+        case Program.NatType => Right(Term.NatType)
+        case Program.Nat(value) => Right(Term.Nat(value))
+        case Program.Succ(t) => convert(t, ctx).map(Term.Succ(_))
+        case Program.Match(t, onZero, onSucc) => convert(t, ctx).flatMap(a => convert(onZero, ctx).flatMap(b => convert(onSucc, ctx).map(c => Term.Match(a, b, c))))
 
     lazy val ident = regex("[_a-zA-Z][_a-zA-Z0-9]*".r).transform(identity, _.copy(expected = "identifier"))
     lazy val number = "-?[0-9]+(\\.[0-9]+)?".r.transform(_.toDouble, _.copy(expected = "number"))
@@ -82,10 +85,10 @@ object PneumaParser {
 
     type PParser = Parser[(String, Int), StringError, Program]
 
-    lazy val modDef = (ident <*> "=".spaced <*> imp).map { case ((id, _), te) => ModElem.Named(id, te) }
-    lazy val modImp = ("?" *> imp.spaced <*> "=".spaced <*> imp).map { case ((id, _), te) => ModElem.Imp(id, te) }
-    lazy val intDef = (ident <*> ":".spaced <*> imp).map { case ((id, _), te) => IntElem.Named(id, te) }
-    lazy val intImp = ("?".spaced *> imp).map(IntElem.Imp(_))
+    lazy val modDef = (       ident <*> "=".spaced <*> imp).map { case ((id, _), te) => ModElem.Named(id, te) }
+    lazy val modImp = ("?" *> ident <*> "=".spaced <*> imp).map { case ((id, _), te) => ModElem.Imp(id, te) }
+    lazy val intDef = (       ident <*> ":".spaced <*> imp).map { case ((id, _), te) => IntElem.Named(id, te) }
+    lazy val intImp = ("?" *> ident <*> ":".spaced <*> imp).map { case ((id, _), te) => IntElem.Imp(id, te) }
     
     lazy val module = "{" *> (modDef or modImp).repeatsep(",".spaced).map(Program.Module(_)).spaced <* "}"
     lazy val interface = "{" *> (intDef or intImp).repeatsep(",".spaced).map(Program.Interface(_)).spaced <* "}"
