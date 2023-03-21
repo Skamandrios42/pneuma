@@ -23,7 +23,7 @@ object PneumaParser {
         case App(t1: Program, t2: Program) // DONE
         case Typ // DONE
         case Phi // DONE
-        case Pro(x: String, t1: Program, t2: Program) // DONE
+        case Pro(x: Option[String], t1: Program, t2: Program) // DONE
         case Imp(t1: Program, t2: Program) // DONE
         case Module(fields: List[ModElem]) // DONE
         case Interface(fields: List[IntElem]) // DONE
@@ -45,7 +45,8 @@ object PneumaParser {
         case Program.App(t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx).map(b => Term.App(a, b)))
         case Program.Typ => Right(Term.Typ)
         case Program.Phi => Right(Term.Phi)
-        case Program.Pro(x, t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, (ctx >> 1) + (x -> 0)).map(b => Term.Pro(a, b)))
+        case Program.Pro(Some(x), t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, (ctx >> 1) + (x -> 0)).map(b => Term.Pro(a, b)))
+        case Program.Pro(None, t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx >> 1).map(b => Term.Pro(a, b)))
         case Program.Imp(t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx >> 1).map(b => Term.Imp(a, b)))
         case Program.Module(fields) => fields.foldLeft[Either[String, List[pneuma.proto.ModElem]]](Right(Nil)) { 
             case (Right(xs), ModElem.Named(name, term)) => convert(term, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.ModElem(name, _, Mode.Exp) :: xs)
@@ -62,7 +63,8 @@ object PneumaParser {
         case Program.NatType => Right(Term.NatType)
         case Program.Nat(value) => Right(Term.Nat(value))
         case Program.Succ(t) => convert(t, ctx).map(Term.Succ(_))
-        case Program.Match(t, onZero, onSucc) => convert(t, ctx).flatMap(a => convert(onZero, ctx).flatMap(b => convert(onSucc, ctx).map(c => Term.Match(a, b, c))))
+        case Program.Match(t, onZero, Program.Abs(x, onSucc)) => 
+            convert(t, ctx).flatMap(a => convert(onZero, ctx).flatMap(b => convert(onSucc, (ctx >> 1) + (x -> 0)).map(c => Term.Match(a, b, c))))
 
     lazy val ident = regex("[_a-zA-Z][_a-zA-Z0-9]*".r).transform(identity, _.copy(expected = "identifier"))
     lazy val number = "-?[0-9]+(\\.[0-9]+)?".r.transform(_.toDouble, _.copy(expected = "number"))
@@ -105,7 +107,7 @@ object PneumaParser {
         _   <- str(")").spaced
         _   <- str("=>").spaced
         out <- imp
-    yield Program.Pro(x, in, out)
+    yield Program.Pro(Some(x), in, out)
 
     lazy val expr = query or typ or natType or natural or product or abstraction or variable or module or interface
 
@@ -113,8 +115,10 @@ object PneumaParser {
         case (te, seq) => seq.foldLeft(te)((t, f) => Program.Get(t, f)) 
     }
 
-    lazy val matchStatement = (get <*> ("match".spaced <*> "{" <*> imp <*> "," <*> abstraction <*> "}").opt).map {
-        case (te, Some(((((_, _), onZero), _), onSucc), _)) => Program.Match(te, onZero, onSucc)
+    lazy val matchStatement = (get <*> ("match".spaced <*> "{" <*> imp.spaced <*> "," <*> abstraction.spaced <*> "}").opt).map {
+        case (te, Some(((((_, _), onZero), _), onSucc), _)) => 
+            println("MATCH1!1!")
+            Program.Match(te, onZero, onSucc)
         case (te, None) => te
     }
 
@@ -128,8 +132,9 @@ object PneumaParser {
         case (a, None) => a
     }
 
-    lazy val imp: PParser = (as <*> (str("=?>").spaced *> imp).opt).map {
-        case (a, Some(b)) => Program.Imp(a, b)
+    lazy val imp: PParser = (as <*> (("=?>" or "=>").spaced <*> imp).opt).map {
+        case (a, Some("=>", b)) => Program.Pro(None, a, b)
+        case (a, Some("=?>", b)) => Program.Imp(a, b)
         case (a, None) => a
     }
 

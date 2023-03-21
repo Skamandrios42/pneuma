@@ -21,12 +21,12 @@ import mill.contrib.scoverage.ScoverageModule
 // TODO extensive testing
 
 /* version 0.0.0 -- infrastructure */
-// TODO build a parser -- with literals
+// TODO build a parser -- with literals IN WORK
 // TODO build a bytecode generator
 // TODO make base types
 
 /* version 0.0.0 -- release */
-// TODO initialize repository
+// TODO initialize repository DONE
 // TODO make publishing setup
 // TODO clean project
 // TODO use ZIO for speedup?
