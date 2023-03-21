@@ -116,9 +116,7 @@ object PneumaParser {
     }
 
     lazy val matchStatement = (get <*> ("match".spaced <*> "{" <*> imp.spaced <*> "," <*> abstraction.spaced <*> "}").opt).map {
-        case (te, Some(((((_, _), onZero), _), onSucc), _)) => 
-            println("MATCH1!1!")
-            Program.Match(te, onZero, onSucc)
+        case (te, Some(((((_, _), onZero), _), onSucc), _)) => Program.Match(te, onZero, onSucc)
         case (te, None) => te
     }
 
@@ -136,6 +134,7 @@ object PneumaParser {
         case (a, Some("=>", b)) => Program.Pro(None, a, b)
         case (a, Some("=?>", b)) => Program.Imp(a, b)
         case (a, None) => a
+        case (a, Some(_, b)) => Program.Imp(a, b) // cant happen, will be obsolete with better typing
     }
 
     def apply(input: String): Result[StringError, Program] = imp.spaced(input, 0)._1

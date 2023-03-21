@@ -135,8 +135,12 @@ enum Term {
       * @return `this` with tagged variables
       */
     def tag(y: Int, t: Term): Term = this match
-        case Var(x, Some(e)) => if x == y then Var(x, Some(t)) else Var(x, Some(e.tag(y, t)))
-        case Var(x, None) => if x == y then Var(x, Some(t)) else Var(x, None)
+        case Var(x, Some(e)) => 
+            if x == y then println(s"TAGGED $x WITH $t")
+            if x == y then Var(x, Some(t)) else Var(x, Some(e.tag(y, t)))
+        case Var(x, None) => 
+            if x == y then println(s"TAGGED $x WITH $t")
+            if x == y then Var(x, Some(t)) else Var(x, None)
         case Abs(t1) => Abs(t1.tag(y + 1, t >> 1))
         case App(t1, t2) => App(t1.tag(y, t), t2.tag(y, t))
         case Typ => Typ
@@ -150,7 +154,7 @@ enum Term {
         case NatType => NatType
         case Nat(value) => Nat(value)
         case Succ(e) => Succ(e.tag(y, t))
-        case Match(t, onZero, onSucc) => Match(t.tag(y, t), onZero.tag(y, t), onSucc.tag(y + 1, t >> 1))
+        case Match(e, onZero, onSucc) => Match(e.tag(y, t), onZero.tag(y, t), onSucc.tag(y + 1, t >> 1))
 
     /** removes all tags from the variables */
     def untag: Term = this match
