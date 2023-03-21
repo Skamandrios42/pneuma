@@ -36,6 +36,12 @@ object Parser {
 
 trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
 
+    def filter[F](f: A => Boolean)(ex: S => F): Parser[S, E | F, A] = this(_) match
+        case (Success(value), src) if f(value) => (Success(value), src)
+        case (Success(value), src) => (Failure(ex(src)), src)
+        case (Failure(value), src) => (Failure(value), src)
+    
+
     def map[B](f: A => B): Parser[S, E, B] =
         this(_) match
             case (Success(value), src) => (Success(f(value)), src)
@@ -76,6 +82,8 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
             _ <- that
         yield a
 
+    def opt: Parser[S, Nothing, Option[A]] = this.map(Some(_)).orElse(Parser[S].success(None))
+
     def orElse[F, B](that: => Parser[S, F, B]): Parser[S, F, A | B] = src =>
         this(src) match
             case (Success(value), src) => (Success(value), src)
@@ -92,6 +100,11 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
         for head <- this
             tail <- repeat
         yield head :: tail) orElse Parser[S].success(List.empty)
+    
+    def repeatsep[F, B, A1 >: A](that: Parser[S, F, B]): Parser[S, E, List[A]] = 
+        for head <- this
+            tail <- that alternate this
+        yield head :: tail.map(_(1))
 
     def alternate[F, B](that: Parser[S, F, B]): Parser[S, F, List[(A, B)]] =
         this(_) match
