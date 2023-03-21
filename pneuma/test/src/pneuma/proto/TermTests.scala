@@ -4,7 +4,7 @@ import scala.language.implicitConversions
 import org.scalatest.funsuite.AnyFunSuite
 import DSL.{*, given}
 
-class Tests extends AnyFunSuite {
+class TermTests extends AnyFunSuite {
 
     extension (self: Either[String, (Term, Term)]) def untag = self.map((x, y) => (x.untag, y.untag))
 
@@ -288,17 +288,5 @@ class Tests extends AnyFunSuite {
                 println(res)
                 assert(res == b)
         }
-    }
-    
-    test("parsing") {
-        val source =
-            """{ a = \x -> x, b = \x -> x, ? Type = Nat } : { a : (x: Nat) => Nat, b : (x: Type) => Type, ? Type }"""
-        val program = PneumaParser(source)
-        val term = program.map(PneumaParser.convert(_, Map.empty))
-        println(source)
-        println("---")
-        println(program)
-        println("---")
-        println(term)
     }
 }
