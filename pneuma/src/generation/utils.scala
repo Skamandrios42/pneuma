@@ -12,14 +12,14 @@ import java.lang.invoke.MethodHandles
 import java.lang.invoke.MethodType
 import org.objectweb.asm.Type
 
-def defineClass(version: Int, access: Int, name: String, signature: String = null,
+def defineClass(version: Int, access: Int, name: String, dir: String = "", signature: String = null,
                 superclass: String = "java/lang/Object", interfaces: Array[String] = null)
                (definition: ClassWriter => Unit) =
     val cw = new ClassWriter(ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES)
     cw.visit(version, access, name, signature, superclass, interfaces)
     definition(cw)
     cw.visitEnd()
-    Files.write(Paths.get(s"$name.class"), cw.toByteArray)
+    Files.write(Paths.get(s"$dir/$name.class"), cw.toByteArray)
 
 extension (cw: ClassWriter)
     def defineMethod(access: Int, name: String, descriptor: String,
@@ -58,4 +58,13 @@ class Namer(val base: String) {
         val name = f"$base$index%04d"
         index += 1
         name
+}
+
+class Counter {
+    private var index = 0
+    def now() = index
+    def next() =
+        var now = index
+        index += 1
+        now
 }

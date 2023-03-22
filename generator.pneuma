@@ -1,6 +1,6 @@
-main : Nat = debug this.res,
-x : Nat = this.f this.n,
-n : Nat = 4, 
+main : Nat = debug res,
+x : Nat = f n,
+n : Nat = 4,
 f : Nat => Nat = \x -> S (S x),
-plus : Nat => Nat => Nat = \x -> \y -> x match { y, \k -> S (this.plus k y) },
-res : Nat = this.plus this.x this.n
+plus : Nat => Nat => Nat = \x -> \y -> x match { y, \k -> S (plus k y) },
+res : Nat = plus x n
