@@ -4,67 +4,9 @@ import scala.language.implicitConversions
 import parsing.Parser
 import parsing.Parser.Result
 import parsing.StringParsers.{*, given}
+import java.nio.file.{Files, Path}
 
 object PneumaParser {
-
-    enum ModElem {
-        case Named(name: String, term: Program)
-        case Imp(name: String, term: Program)
-    }
-
-    enum IntElem {
-        case Named(name: String, typ: Program)
-        case Imp(name: String, typ: Program)
-    }
-
-    enum Program {
-        case Var(x: String) // DONE
-        case Abs(x: String, t: Program) // DONE
-        case App(t1: Program, t2: Program) // DONE
-        case Typ // DONE
-        case Phi // DONE
-        case Pro(x: Option[String], t1: Program, t2: Program) // DONE
-        case Imp(t1: Program, t2: Program) // DONE
-        case Module(fields: List[ModElem]) // DONE
-        case Interface(fields: List[IntElem]) // DONE
-        case Get(t: Program, field: String) // DONE
-        case As(te: Program, ty: Program) // DONE
-
-        case NatType // DONE
-        case Nat(value: Int) // DONE
-        case Succ(t: Program) // DONE
-        case Match(t: Program, onZero: Program, onSucc: Abs)
-    }
-
-    extension (self: Map[String, Int]) def >>(amount: Int) = self.map((s, i) => (s, i + amount))
-
-    def convert(program: Program, ctx: Map[String, Int]): Either[String, Term] = program match
-        case Program.Var(x) if ctx.contains(x) => Right(Term.Var(ctx(x), None))
-        case Program.Var(x) => Left(s"undefined variable $x")
-        case Program.Abs(x, t) => convert(t, (ctx >> 1) + (x -> 0)).map(Term.Abs(_))
-        case Program.App(t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx).map(b => Term.App(a, b)))
-        case Program.Typ => Right(Term.Typ)
-        case Program.Phi => Right(Term.Phi)
-        case Program.Pro(Some(x), t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, (ctx >> 1) + (x -> 0)).map(b => Term.Pro(a, b)))
-        case Program.Pro(None, t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx >> 1).map(b => Term.Pro(a, b)))
-        case Program.Imp(t1, t2) => convert(t1, ctx).flatMap(a => convert(t2, ctx >> 1).map(b => Term.Imp(a, b)))
-        case Program.Module(fields) => fields.foldLeft[Either[String, List[pneuma.proto.ModElem]]](Right(Nil)) { 
-            case (Right(xs), ModElem.Named(name, term)) => convert(term, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.ModElem(name, _, Mode.Exp) :: xs)
-            case (Right(xs), ModElem.Imp(name, term))   => convert(term, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.ModElem(name, _, Mode.Imp) :: xs)
-            case (Left(msg), _) => Left(msg)
-        }.map(Term.Module(_))
-        case Program.Interface(fields) => fields.foldLeft[Either[String, List[pneuma.proto.IntElem]]](Right(Nil)) { 
-            case (Right(xs), IntElem.Named(name, typ)) => convert(typ, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.IntElem(name, _, Mode.Exp) :: xs)
-            case (Right(xs), IntElem.Imp(name, typ))   => convert(typ, (ctx >> 1) + ("this" -> 0)).map(pneuma.proto.IntElem(name, _, Mode.Imp) :: xs)
-            case (Left(msg), _) => Left(msg)
-        }.map(Term.Interface(_))
-        case Program.Get(t, field) => convert(t, ctx).map(Term.Get(_, field))
-        case Program.As(te, ty) => convert(te, ctx).flatMap(a => convert(ty, ctx).map(b => Term.As(a, b)))
-        case Program.NatType => Right(Term.NatType)
-        case Program.Nat(value) => Right(Term.Nat(value))
-        case Program.Succ(t) => convert(t, ctx).map(Term.Succ(_))
-        case Program.Match(t, onZero, Program.Abs(x, onSucc)) => 
-            convert(t, ctx).flatMap(a => convert(onZero, ctx).flatMap(b => convert(onSucc, (ctx >> 1) + (x -> 0)).map(c => Term.Match(a, b, c))))
 
     lazy val ident = regex("[_a-zA-Z][_a-zA-Z0-9]*".r).transform(identity, _.copy(expected = "identifier"))
     lazy val number = "-?[0-9]+(\\.[0-9]+)?".r.transform(_.toDouble, _.copy(expected = "number"))
@@ -87,14 +29,18 @@ object PneumaParser {
 
     type PParser = Parser[(String, Int), StringError, Program]
 
-    lazy val modDef = (       ident <*> "=".spaced <*> imp).map { case ((id, _), te) => ModElem.Named(id, te) }
-    lazy val modImp = ("?" *> ident <*> "=".spaced <*> imp).map { case ((id, _), te) => ModElem.Imp(id, te) }
-    lazy val intDef = (       ident <*> ":".spaced <*> imp).map { case ((id, _), te) => IntElem.Named(id, te) }
-    lazy val intImp = ("?" *> ident <*> ":".spaced <*> imp).map { case ((id, _), te) => IntElem.Imp(id, te) }
+    lazy val modDef = (       ident <*> "=".spaced <*> imp).map { case ((id, _), te) => Program.ModElem(id, te, Program.Mode.Exp) }
+    lazy val modImp = ("?" *> ident <*> "=".spaced <*> imp).map { case ((id, _), te) => Program.ModElem(id, te, Program.Mode.Imp) }
+    lazy val intDef = (       ident <*> ":".spaced <*> imp).map { case ((id, _), te) => Program.IntElem(id, te, Program.Mode.Exp) }
+    lazy val intImp = ("?" *> ident <*> ":".spaced <*> imp).map { case ((id, _), te) => Program.IntElem(id, te, Program.Mode.Imp) }
+    lazy val typedDef = (       ident <*> ":".spaced <*> imp <*> "=".spaced <*> imp).map { case ((((id, _), ty), _), te) => (Program.ModElem(id, te, Program.Mode.Exp), Program.IntElem(id, ty, Program.Mode.Exp)) }
+    lazy val typedImp = ("?" *> ident <*> ":".spaced <*> imp <*> "=".spaced <*> imp).map { case ((((id, _), ty), _), te) => (Program.ModElem(id, te, Program.Mode.Imp), Program.IntElem(id, ty, Program.Mode.Imp)) }
     
     lazy val module = "{" *> (modDef or modImp).repeatsep(",".spaced).map(Program.Module(_)).spaced <* "}"
     lazy val interface = "{" *> (intDef or intImp).repeatsep(",".spaced).map(Program.Interface(_)).spaced <* "}"
     
+    lazy val typedModule = "{" *> (typedDef or typedImp).repeatsep(",".spaced).map(xs => Program.As(Program.Module(xs.map(_(0))), Program.Interface(xs.map(_(1))))).spaced <* "}"
+
     lazy val query = "?".map(_ => Program.Phi)
     lazy val typ = "Type".map(_ => Program.Typ)
     lazy val natType = "Nat".map(_ => Program.NatType)
@@ -109,7 +55,7 @@ object PneumaParser {
         out <- imp
     yield Program.Pro(Some(x), in, out)
 
-    lazy val expr = query or typ or natType or natural or product or abstraction or variable or module or interface
+    lazy val expr = query or typ or natType or natural or product or abstraction or variable or typedModule or module or interface
 
     lazy val get: PParser = (expr <*> (".".spaced *> ident).repeat).map { 
         case (te, seq) => seq.foldLeft(te)((t, f) => Program.Get(t, f)) 
@@ -138,4 +84,5 @@ object PneumaParser {
     }
 
     def apply(input: String): Result[StringError, Program] = imp.spaced(input, 0)._1
+    def fromFile(name: String) = apply("{" ++ Files.readString(Path.of(name)) ++ "}")
 }

@@ -26,7 +26,7 @@ object StringParsers {
     given Conversion[String, Parser[(String, Int), StringError, String]] = str(_)
     given Conversion[Regex, Parser[(String, Int), StringError, String]] = regex(_)
 
-    def skip = regex(" *".r)
+    def skip = regex("\\s*".r)
 
     extension [E, A](self: Parser[(String, Int), E, A]) def spaced = skip *> self <* skip
 

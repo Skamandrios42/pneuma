@@ -25,16 +25,13 @@ object DSL {
     }
 
     extension (self: String) {
-        def :=(term: Term) = ModElem(self, term, Mode.Exp)
-        def ::=(term: Term) = IntElem(self, term, Mode.Exp)
-        def :?=(term: Term) = ModElem(self, term, Mode.Imp)
-        def ::?=(term: Term) = IntElem(self, term, Mode.Imp)
+        def :=(term: Term) = Term.ModElem(self, term, Term.Mode.Exp)
+        def ::=(term: Term) = Term.IntElem(self, term, Term.Mode.Exp)
+        def :?=(term: Term) = Term.ModElem(self, term, Term.Mode.Imp)
+        def ::?=(term: Term) = Term.IntElem(self, term, Term.Mode.Imp)
     }
-    // extension (self: (String, Term)) {
-    //     def ?=(term: Term) = ModElem.Imp(self(0), self(1), term)
-    // }
 
-    def mod(defs: ModElem*) = Term.Module(defs.toList)
-    def int(defs: IntElem*) = Term.Interface(defs.toList)
+    def mod(defs: Term.ModElem*) = Term.Module(defs.toList)
+    def int(defs: Term.IntElem*) = Term.Interface(defs.toList)
 
 }

@@ -1,19 +1,22 @@
 package pneuma.proto
 
 import scala.annotation.targetName
+import Term.{IntElem, ModElem, Mode}
 
-enum Mode { case Exp, Imp }
+object Term {
+    enum Mode { case Exp, Imp }
 
-case class ModElem(name: String, term: Term, mode: Mode) {
-    override def toString(): String = mode match
-        case Mode.Exp => s"$name  = $term"
-        case Mode.Imp => s"? $name = $term"
-}
+    case class ModElem(name: String, term: Term, mode: Mode) {
+        override def toString: String = mode match
+            case Mode.Exp => s"$name  = $term"
+            case Mode.Imp => s"? $name = $term"
+    }
 
-case class IntElem(name: String, term: Term, mode: Mode) {
-    override def toString(): String = mode match
-        case Mode.Exp => s"$name : $term"
-        case Mode.Imp => s"? $name : $term"
+    case class IntElem(name: String, term: Term, mode: Mode) {
+        override def toString: String = mode match
+            case Mode.Exp => s"$name : $term"
+            case Mode.Imp => s"? $name : $term"
+    }
 }
 
 /** The abstract syntax tree representation of a pneuma program 
