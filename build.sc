@@ -3,45 +3,6 @@ import mill._
 import scalalib._
 import mill.contrib.scoverage.ScoverageModule
 
-/* version 0.0.0 -- core 1 */
-// TODO module checking with expected shape DONE
-// TODO module insertion preventation -- better module checking algorithm DONE
-// TODO equivalence function DONE
-
-/* version 0.0.0 -- core 2 */
-// TODO document pneuma.proto DONE
-// TODO make modules recursive DONE
-// TODO rethink the implicit naming conventions DONE
-// TODO introduce natural numbers DONE
-
-// TODO exact semantics of Ascriptions DONE?
-// TODO need to tag implicit context DONE?
-// TODO what happens with implicits in types DONE?
-// TODO recheck complete structure DONE
-// TODO testing DONE
-
-/* version 0.0.0 -- infrastructure */
-// TODO build a parser DONE
-// TODO build a bytecode generator
-// TODO testing
-// TODO make base types
-
-/* version 0.0.0 -- release */
-// TODO initialize repository DONE
-// TODO make publishing setup
-// TODO clean project
-// TODO use ZIO for speedup?
-
-/* version 0.1.0 */
-// TODO inductive datatypes
-// TODO typeclasses for literal macros
-// TODO mutual recursive modules DONE? i think so
-
-// POTENTIAL BUGS
-// shifting
-// missing tags in implicit context
-// wrong type priority in for example ascription
-
 object pneuma extends ScoverageModule {
 
     def name = "Pneuma Language"
