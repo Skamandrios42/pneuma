@@ -48,7 +48,7 @@ object pneuma extends ScoverageModule {
     def version = "0.0.0"
     def scalaVersion = "3.2.2"
     def scoverageVersion = "2.0.7"
-    def mainClass = T(Some("lambdacalculus.test"))
+    def mainClass = T(Some("pneuma.proto.Compiler"))
     def scalacOptions = Seq("-feature", "-deprecation")
     def ivyDeps = Agg(ivy"org.ow2.asm:asm:9.4")
 

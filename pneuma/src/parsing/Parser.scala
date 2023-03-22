@@ -17,7 +17,9 @@ object Parser {
         def foreach[B](f: A => Unit): Unit = this match
             case Success(value) => f(value)
             case _ =>
-        
+        def toEither: Either[E, A] = this match
+            case Success(value) => Right(value)
+            case Failure(value) => Left(value)
     }
 
     def from[S, A](f: S => (A, S)): Parser[S, Nothing, A] = src0 =>

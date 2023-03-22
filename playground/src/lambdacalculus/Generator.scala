@@ -20,7 +20,7 @@ object Generator {
     def apply(name: String, term: Term) =
         defineClass(V1_8, ACC_PUBLIC, name) { cw =>
             cw.defineMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V") { mv =>
-                generate(name, cw, mv, term, Nil, Namer("anon$"))
+                generate(name, cw, mv, term, Nil, new Namer("anon$"))
                 mv.visitInsn(RETURN)
             }
         }
@@ -111,7 +111,7 @@ object Generator {
 
         val visitor = writer.visitMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V", null, null)
         visitor.visitCode()
-        generate(name, writer, visitor, term, Nil, Namer("anon_"))
+        generate(name, writer, visitor, term, Nil, new Namer("anon_"))
         visitor.visitInvokeDynamicInsn(
             "apply", "()Ljava/util/function/Function;", bootstrap,
             Type.getType("(Ljava/lang/Object;)Ljava/lang/Object;"),
