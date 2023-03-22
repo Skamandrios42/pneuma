@@ -17,12 +17,13 @@ import mill.contrib.scoverage.ScoverageModule
 // TODO exact semantics of Ascriptions DONE?
 // TODO need to tag implicit context DONE?
 // TODO what happens with implicits in types DONE?
-// TODO recheck complete structure
-// TODO extensive testing
+// TODO recheck complete structure DONE
+// TODO testing DONE
 
 /* version 0.0.0 -- infrastructure */
-// TODO build a parser -- with literals IN WORK
+// TODO build a parser DONE
 // TODO build a bytecode generator
+// TODO testing
 // TODO make base types
 
 /* version 0.0.0 -- release */

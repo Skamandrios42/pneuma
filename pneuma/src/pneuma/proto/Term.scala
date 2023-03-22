@@ -37,6 +37,7 @@ enum Term {
     case NatType
     case Nat(value: Int)
     case Succ(t: Term)
+    case Debug(t: Term)
     case Match(t: Term, onZero: Term, onSucc: Term)
 
     /** generates a simple string representation of the program */
@@ -56,6 +57,7 @@ enum Term {
         case NatType => "Nat"
         case Nat(value) => s"n$value"
         case Succ(t) => s"(S $t)"
+        case Debug(t) => s"(debug $t)"
         case Match(t, onZero, onSucc) => s"($t match Z => $onZero, S => $onSucc )"
 
     extension [A](self: List[ModElem]) {
@@ -101,6 +103,7 @@ enum Term {
         case NatType => NatType
         case Nat(value) => Nat(value)
         case Succ(t) => Succ(t.shift(amount, cutoff))
+        case Debug(t) => Debug(t.shift(amount, cutoff))
         case Match(t, onZero, onSucc) => Match(t.shift(amount, cutoff), onZero.shift(amount, cutoff), onSucc.shift(amount, cutoff + 1))
 
     /** returns [[shift(amount, 0)]] */
@@ -128,9 +131,10 @@ enum Term {
         case Get(t1, field) => Get(t1.replace(y, t), field)
         case As(te, ty) => Term.As(te.replace(y, t), ty.replace(y, t))
         case NatType => NatType
-        case Nat(value) => Term.Nat(value)
-        case Succ(e) => Term.Succ(e.replace(y, t))
-        case Match(e, onZero, onSucc) => Term.Match(e.replace(y, t), onZero.replace(y, t), onSucc.replace(y + 1, t >> 1))
+        case Nat(value) => Nat(value)
+        case Succ(e) => Succ(e.replace(y, t))
+        case Debug(e) => Debug(e.replace(y, t))
+        case Match(e, onZero, onSucc) => Match(e.replace(y, t), onZero.replace(y, t), onSucc.replace(y + 1, t >> 1))
 
     /** similiar to [[replace]], but instead of replacing, `t` is added as in the `tagged` field of the variable
       * @param y the variable to be tagged
@@ -139,10 +143,10 @@ enum Term {
       */
     def tag(y: Int, t: Term): Term = this match
         case Var(x, Some(e)) => 
-            if x == y then println(s"TAGGED $x WITH $t")
+            //if x == y then println(s"TAGGED $x WITH $t")
             if x == y then Var(x, Some(t)) else Var(x, Some(e.tag(y, t)))
         case Var(x, None) => 
-            if x == y then println(s"TAGGED $x WITH $t")
+            //if x == y then println(s"TAGGED $x WITH $t")
             if x == y then Var(x, Some(t)) else Var(x, None)
         case Abs(t1) => Abs(t1.tag(y + 1, t >> 1))
         case App(t1, t2) => App(t1.tag(y, t), t2.tag(y, t))
@@ -157,6 +161,7 @@ enum Term {
         case NatType => NatType
         case Nat(value) => Nat(value)
         case Succ(e) => Succ(e.tag(y, t))
+        case Debug(e) => Debug(e.tag(y, t))
         case Match(e, onZero, onSucc) => Match(e.tag(y, t), onZero.tag(y, t), onSucc.tag(y + 1, t >> 1))
 
     /** removes all tags from the variables */
@@ -175,6 +180,7 @@ enum Term {
         case NatType => NatType
         case Nat(value) => Nat(value)
         case Succ(e) => Succ(e.untag)
+        case Debug(e) => Debug(e.untag)
         case Match(t, onZero, onSucc) => Match(t.untag, onZero.untag, onSucc.untag)
         
 
@@ -193,6 +199,11 @@ enum Term {
         case Var(x, Some(t)) => t
         case Succ(e) => e.eval match
             case Nat(value) => Nat(value + 1)
+            case e => e
+        case Debug(e) => e.eval match
+            case Nat(value) =>
+                println(s"debug $value") 
+                Nat(value)
             case e => e
         case Match(e, onZero, onSucc) => e.eval match
             case Nat(0) => onZero.eval
@@ -258,6 +269,7 @@ enum Term {
                 case (NatType, NatType) => true
                 case (Nat(v1), Nat(v2)) => v1 == v2
                 case (Succ(t1), Succ(t2)) => t1.equivalence(t2, updatedRelation)
+                case (Debug(t1), Debug(t2)) => t1.equivalence(t2, updatedRelation)
                 case (Match(t1, z1, s1), Match(t2, z2, s2)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation)
                 case _ => false
 
@@ -266,7 +278,7 @@ enum Term {
       * @return `this === shape.get`, if shape is defined or else true
       */
     def matches(shape: Option[Term]): Boolean = 
-        println(s"DEBUG: $this should match $shape")
+        //println(s"DEBUG: $this should match $shape")
         shape match
             case Some(value) => this === value
             case None => true
@@ -283,14 +295,14 @@ enum Term {
 
     def searchDirect(typ: Term, i: I, all: I): Option[Term] = i.headOption match
         case Some(imp, index) if imp === typ => 
-            println("found implicit")
+            //println("found implicit")
             Some(index)
         case Some(_) => searchDirect(typ, i.tail, all)
         case None => None
 
     def searchFunction(typ: Term, i: I, all: I): Option[Term] = i.headOption match
         case Some((Imp(t1, t2), i)) if t2 === (typ >> 1) => 
-            println(s"found implicit function $t1 -> $t2")
+            //println(s"found implicit function $t1 -> $t2")
             search(t1, all, all).map { arg => App(i, arg) }
         case Some(_) => searchFunction(typ, i.tail, all)
         case None => None
@@ -320,9 +332,9 @@ enum Term {
       * @return either term and type with resolved implicits or an error message
       */
     def transform(g: G, i: I, shape: Option[Term]): Either[String, (Term, Term)] =
-        shape match
-            case None => println(s"[DEBUG] $this")
-            case Some(value) => println(s"[DEBUG] $this : $value")
+        // shape match
+        //     case None => println(s"[DEBUG] $this")
+        //     case Some(value) => println(s"[DEBUG] $this : $value")
         // typecheck and transform the shape
         if this == Typ && shape.contains(Typ) then Right(Typ, Typ)
         else shape.map(_.transform(g, i, Some(Typ)).map(_(0).eval)) match
@@ -349,7 +361,7 @@ enum Term {
                 // use shape to generate type for abstraction
                 case Abs(t) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2)) =>    // Done SHOULD t1 be checked to be nonempty
-                        println(s"-->> $g -- $t1")
+                        //println(s"-->> $g -- $t1")
                         (t.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, Some(t2))).map { (te, t3) =>
                             (Abs(te), Pro(t1, t3))
                         }
@@ -374,7 +386,7 @@ enum Term {
                 // search for implicit to match shape
                 case Phi => shape match
                     case Some(value) => 
-                        println(s"CONTEXT $i SHAPE $value")
+                        //println(s"CONTEXT $i SHAPE $value")
                         // throw new Exception()
                         search(value, i, i).map(Right(_, value)).getOrElse(Left(s"no implicit found for $shape"))
                     case None => Left(s"no implicit found for $shape")
@@ -406,7 +418,7 @@ enum Term {
                     case (te, Interface(fields)) => 
                         fields.find(_.name == field) match
                             case Some(IntElem(name, typ, mode)) => 
-                                println(s"$typ -- $shape [${g.mkString(", ")}]")
+                                //println(s"$typ -- $shape [${g.mkString(", ")}]")
                                 Get(te, field).checkWithSearch(typ.replace(0, te), shape, i) // should `te` be shifted?
                             case _ => Left(s"$fields has no '$field' field")
                     case _ => Left(s"no '$field' field")
@@ -415,6 +427,7 @@ enum Term {
                 case Nat(value) => if value >= 0 then Right(Nat(value), NatType) else Left("natural numbers are >= 0")
                 case NatType => Right(NatType, Typ)
                 case Succ(t) => t.transform(g, i, Some(NatType)).flatMap((te, ty) => Succ(te).checkWithSearch(NatType, shape, i))
+                case Debug(t) => t.transform(g, i, Some(NatType)).flatMap((te, ty) => Debug(te).checkWithSearch(NatType, shape, i))
                 case Match(t, onZero, onSucc) => t.transform(g, i, Some(NatType)).flatMap { (te, ty) =>
                     onZero.transform(g, i, shape).flatMap { (z, zt) => 
                         onSucc.transform((g >> 1) + (0 -> NatType), i, shape.map(_ >> 1)).flatMap { (s, st) =>

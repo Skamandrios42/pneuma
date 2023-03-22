@@ -68,6 +68,7 @@ object PneumaParser {
 
     lazy val app: PParser = (matchStatement <* skip).fold {
         case (Program.Var("S"), arg) => Program.Succ(arg)
+        case (Program.Var("debug"), arg) => Program.Debug(arg)
         case (abs, arg) => Program.App(abs, arg)
     }
 
@@ -84,5 +85,5 @@ object PneumaParser {
     }
 
     def apply(input: String): Result[StringError, Program] = imp.spaced(input, 0)._1
-    def fromFile(name: String) = apply("{" ++ Files.readString(Path.of(name)) ++ "}")
+    def fromFile(name: String) = apply("{" ++ Files.readString(Path.of(name)) ++ "}.main")
 }

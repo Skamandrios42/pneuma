@@ -1,1 +1,2 @@
-plus : Nat => Nat => Nat = \x -> \y -> x match { y, \k -> S (this.plus k y) }
+plus : Nat => Nat => Nat = \x -> \y -> x match { y, \k -> S (this.plus k y) },
+main : Nat = debug (this.plus 3 4)

@@ -21,6 +21,7 @@ object DSL {
         def -?>(term: Term) = Term.Imp(self, term)
         def !(field: String) = Term.Get(self, field)
         def succ = Term.Succ(self)
+        def debug = Term.Debug(self)
         def pattern(onZero: Term, onSucc: Term) = Term.Match(self, onZero, onSucc)
     }
 

@@ -15,7 +15,7 @@ import org.objectweb.asm.Type
 def defineClass(version: Int, access: Int, name: String, signature: String = null,
                 superclass: String = "java/lang/Object", interfaces: Array[String] = null)
                (definition: ClassWriter => Unit) =
-    val cw = new ClassWriter(ClassWriter.COMPUTE_MAXS)
+    val cw = new ClassWriter(ClassWriter.COMPUTE_MAXS + ClassWriter.COMPUTE_FRAMES)
     cw.visit(version, access, name, signature, superclass, interfaces)
     definition(cw)
     cw.visitEnd()
@@ -51,3 +51,11 @@ extension (mv: MethodVisitor)
             bootType.toMethodDescriptorString, false
         )
         mv.visitInvokeDynamicInsn(nameOfSAM, descriptorOfDynamicCall, bootstrap, funType, implementation, funType)
+
+class Namer(val base: String) {
+    private var index = 0
+    def next() =
+        val name = f"$base$index%04d"
+        index += 1
+        name
+}
