@@ -6,7 +6,7 @@ import lambdacalculus.Term.Print
 import lambdacalculus.Term.Str
 import lambdacalculus.Term.Var
 import parsing.Parser
-import parsing.Parser.Result
+import general.Result
 import parsing.StringParsers
 
 import scala.language.implicitConversions

@@ -1,0 +1,8 @@
+?n : Nat = 4,
+?f : Nat =?> { x : Nat } = { x = S ? },
+?g : { x : Nat } =?> { y : Nat } = { y = S (? : { x : Nat }).x },
+
+summon : (A : Type) => A =?> A = \A -> ?,
+
+test : Nat = (summon { y : Nat }).y, 
+main : Nat = debug test

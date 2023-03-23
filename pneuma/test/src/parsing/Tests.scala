@@ -3,7 +3,7 @@ package parsing
 import scala.language.implicitConversions
 import scala.io.StdIn
 import org.scalatest.funsuite.AnyFunSuite
-import Parser.Result.{Success, Failure}
+import general.Result.{Success, Failure}
 
 class Tests extends AnyFunSuite:
 

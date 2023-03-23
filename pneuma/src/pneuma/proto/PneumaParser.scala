@@ -2,13 +2,31 @@ package pneuma.proto
 
 import scala.language.implicitConversions
 import parsing.Parser
-import parsing.Parser.Result
-import parsing.StringParsers.{*, given}
+import general.Result
 import java.nio.file.{Files, Path}
+import scala.util.matching.Regex
+import general.Region
+import scala.collection.immutable.ArraySeq
 
 object PneumaParser {
 
-    lazy val ident = regex("[_a-zA-Z][_a-zA-Z0-9]*".r).transform(identity, _.copy(expected = "identifier"))
+    def str(s: String): Parser[Source, ParseError, String] = source => source.parseStr(s) match
+        case Result.Success(source, region, s) => (Result.Success(s), source)
+        case Result.Failure(values) => (Result.Failure(values), source)
+
+    def regex(r: Regex): Parser[Source, ParseError, String] = source => source.parseRegex(r) match
+        case Result.Success(source, region, s) => (Result.Success(s), source)
+        case Result.Failure(values) => (Result.Failure(values), source)
+
+    given Conversion[String, Parser[Source, ParseError, String]] = str(_)
+
+    given Conversion[Regex, Parser[Source, ParseError, String]] = regex(_)
+
+    def skip = regex("\\s*".r)
+
+    extension [E, A](self: Parser[Source, E, A]) def spaced = skip *> self <* skip
+
+    lazy val ident = "[_a-zA-Z][_a-zA-Z0-9]*".r.transform(identity, _.copy(expected = "identifier"))
     lazy val number = "-?[0-9]+(\\.[0-9]+)?".r.transform(_.toDouble, _.copy(expected = "number"))
     lazy val integer = "-?[0-9]+".r.transform(_.toInt, _.copy(expected = "number"))
     lazy val string = regex("\"([^\"\\\\]|\\\\[\\s\\S])*\"".r).transform(
@@ -18,7 +36,8 @@ object PneumaParser {
 
     lazy val variable = ident.map(Program.Var(_)) or ("(" *> imp.spaced <* ")")
 
-    lazy val natural = integer.filter(_ >= 0)((_, p) => StringError("non-negative number", "negative number", p)).map(Program.Nat(_))
+    lazy val natural = integer.filter(_ >= 0)(
+        e => ParseError("non-negative number", "negative number", Region(None, e.pos, e.pos))).map(Program.Nat(_))
 
     lazy val abstraction = for 
         _    <- str("\\")
@@ -27,7 +46,7 @@ object PneumaParser {
         body <- imp
     yield Program.Abs(x, body) : Program.Abs
 
-    type PParser = Parser[(String, Int), StringError, Program]
+    type PParser = Parser[Source, ParseError, Program]
 
     lazy val modDef = (       ident <*> "=".spaced <*> imp).map { case ((id, _), te) => Program.ModElem(id, te, Program.Mode.Exp) }
     lazy val modImp = ("?" *> ident <*> "=".spaced <*> imp).map { case ((id, _), te) => Program.ModElem(id, te, Program.Mode.Imp) }
@@ -84,6 +103,6 @@ object PneumaParser {
         case (a, Some(_, b)) => Program.Imp(a, b) // cant happen, will be obsolete with better typing
     }
 
-    def apply(input: String): Result[StringError, Program] = imp.spaced(input, 0)._1
+    def apply(input: String): Result[ParseError, Program] = imp.spaced(Source(ArraySeq.unsafeWrapArray(input.split('\n')), 0))(0)
     def fromFile(name: String) = apply("{" ++ Files.readString(Path.of(name)) ++ "}.main")
 }

@@ -26,14 +26,18 @@ A description of this project is coming soon ...
  - make publishing setup DONE
  - clean project -- make it more consistent
  - testing
- - make base types
+ - make base types (Strings? or wait for 0.1.0)
  - use ZIO for speedup?
+ - 'no y field' bug in implicits.pneuma
 
 ## version 0.1.0
  - inductive datatypes
  - make type classes possible
  - type classes for literal macros
  - mutual recursive modules DONE? i think so
+ - comments syntax
+ - CLI app
+ - documentation
 
 ## POTENTIAL BUGS
  - shifting

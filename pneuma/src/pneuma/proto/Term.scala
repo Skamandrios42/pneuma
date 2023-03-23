@@ -108,7 +108,7 @@ enum Term {
 
     /** returns [[shift(amount, 0)]] */
     def >>(amount: Int) = shift(amount, 0)
-    
+
     /** returns [[shift(-amount, 0)]] */
     def <<(amount: Int) = shift(-amount, 0)
 

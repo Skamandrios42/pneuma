@@ -1,8 +1,9 @@
 package parsing
 
 import scala.util.matching.Regex
-import Parser.Result.{Success, Failure}
+import general.Result.{Success, Failure}
 import scala.io.StdIn
+import general.Result
 
 @main
 def run(): Unit =
@@ -10,12 +11,12 @@ def run(): Unit =
     def str(s: String): Parser[String, Unit, String] =
         (src: String) => if src.startsWith(s)
             then (Success(s), src.drop(s.length))
-            else (Failure(()), src)
+            else (Result.fail, src)
 
     def regex(r: Regex): Parser[String, Unit, String] =
         (src: String) => r.findPrefixOf(src) match
             case Some(s) => (Success(s), src.drop(s.length))
-            case None    => (Failure(()), src)
+            case None    => (Result.fail, src)
 
     val myParser = for
         hello <- str("Hello")

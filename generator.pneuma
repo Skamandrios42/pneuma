@@ -1,6 +1,16 @@
 main : Nat = debug res,
-x : Nat = f n,
-n : Nat = 4,
-f : Nat => Nat = \x -> S (S x),
-plus : Nat => Nat => Nat = \x -> \y -> x match { y, \k -> S (plus k y) },
-res : Nat = plus x n
+
+plus  : Nat => Nat => Nat = \x -> \y -> x match { y, \k -> S (plus k y) },
+times : Nat => Nat => Nat = \x -> \y -> x match { 0, \k -> plus y (times k y) },
+fact  : Nat => Nat        = \x -> x match { 1, \k -> times (S k) (fact k) },
+P     : Nat => Nat        = \x -> x match { 0, \k -> k },
+minus : Nat => Nat => Nat = \x -> \y -> y match { x, \k -> P (minus x k) },
+
+res : Nat = fact 7,
+
+Number : Type => Type = \A -> { plus : A => A => A, times : A => A => A },
+
+?nat_num : Number Nat = { 
+    plus  : Nat => Nat => Nat = \x -> \y -> x match { y, \k -> S (plus k y) },
+    times : Nat => Nat => Nat = \x -> \y -> x match { 0, \k -> plus y (times k y) }
+}
