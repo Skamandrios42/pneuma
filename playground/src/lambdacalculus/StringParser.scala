@@ -1,4 +1,4 @@
-package parsing
+package lambdacalculus
 
 import general.Result.{Success, Failure}
 import general.Result

@@ -3,29 +3,30 @@ package pneuma.proto
 import scala.language.implicitConversions
 import org.scalatest.funsuite.AnyFunSuite
 import DSL.{*, given}
+import general.Result
 
 class TermTests extends AnyFunSuite {
 
-    extension (self: Either[String, (Term, Term)]) def untag = self.map((x, y) => (x.untag, y.untag))
+    extension (self: Result[TypeError, (Term, Term)]) def untag = self.map((x, y) => (x.untag, y.untag))
 
     test("miscellaneous") {
         val te = \(\(1 at 0))
         val ty = (* --> *) --> (* --> *)
-        assert((te typeCheck ty) == Right(te, ty))
+        assert((te typeCheck ty) == Result.Success(te, ty))
     }
 
     test("implicits I") {
         val te = \(0 at ?)
         val ty = (* --> *) --> (* -?> *)
         val teRes = \(\(1 at 0))
-        assert((te typeCheck ty) == Right(teRes, ty))
+        assert((te typeCheck ty) == Result.Success(teRes, ty))
     }
 
     test("implicits II") {
         val te = \(mod("x" := 1, "y" := ?))
         val ty = Nat --> (Nat -?> int("x" ::= Nat, "y" ::= Nat))
         val teRes = \(\(mod("x" := 2, "y" := 1)))
-        assert((te typeCheck ty).untag == Right(teRes, ty))
+        assert((te typeCheck ty).untag == Result.Success(teRes, ty))
     }
 
     test("implicits III") {
@@ -33,7 +34,7 @@ class TermTests extends AnyFunSuite {
         val te = \(0 ! "a")
         val ty = typeWithInstance --> (Nat -?> (1 ! "A"))
         val teRes = \(\(1 ! "a"))
-        assert((te typeCheck ty).untag == Right(teRes, ty))
+        assert((te typeCheck ty).untag == Result.Success(teRes, ty))
     }
 
     test("modules") {
@@ -52,7 +53,7 @@ class TermTests extends AnyFunSuite {
             "te" := \(\(1 at 0)),
             "imp$0000" :?= *,
         )
-        assert((te.typeCheck(ty)).untag == Right(teRes, ty))
+        assert((te.typeCheck(ty)).untag == Result.Success(teRes, ty))
     }
 
     test("implicits in modules I") {
@@ -68,7 +69,7 @@ class TermTests extends AnyFunSuite {
             "a" := \(0),
             "c" := \((1 ! "a") at 0)
         )
-        assert((te typeCheck ty).untag == Right(teRes, ty))
+        assert((te typeCheck ty).untag == Result.Success(teRes, ty))
     }
 
     test("implicits in modules II") {
@@ -84,7 +85,7 @@ class TermTests extends AnyFunSuite {
             "a" := \(0),
             "c" := (0 ! "a") at 1
         ))
-        assert((te typeCheck ty).untag == Right(teRes, ty))
+        assert((te typeCheck ty).untag == Result.Success(teRes, ty))
     }
 
     object Example {
@@ -107,14 +108,14 @@ class TermTests extends AnyFunSuite {
     }
 
     test("implicits in modules III a") {
-        assert((Example.te typeCheck Example.ty).untag == Right(Example.te, Example.ty))
+        assert((Example.te typeCheck Example.ty).untag == Result.Success(Example.te, Example.ty))
     }
 
     test("implicits in modules III b") {
         val test = \(mod("x" := (1 ! "imp$1") at ?))
         val tyst = Example.ty --> int("x" ::= ((1 ! "A") -?> (2 ! "B")))
         val expected = \(mod("x" := \((2 ! "imp$1") at 0)))
-        assert((test typeCheck tyst).untag == Right(expected, tyst))
+        assert((test typeCheck tyst).untag == Result.Success(expected, tyst))
     }
 
     test("implicits in modules III c") {
@@ -137,7 +138,7 @@ class TermTests extends AnyFunSuite {
             "res" := (0 ! "imp$2") at ((0 ! "imp$1") at (0 ! "imp$0"))
         ))
 
-        assert((test typeCheck interface).untag == Right(expected, interface))
+        assert((test typeCheck interface).untag == Result.Success(expected, interface))
     }
 
     test("implicits in modules IV") {
@@ -158,7 +159,7 @@ class TermTests extends AnyFunSuite {
             "b" ::= (0 ! "a"),
         )
 
-        assert(te.typeCheck(ty).untag == Right(teExp, tyExp))
+        assert(te.typeCheck(ty).untag == Result.Success(teExp, tyExp))
     }
 
     test("implicits in modules V") {
@@ -183,7 +184,7 @@ class TermTests extends AnyFunSuite {
             "c" ::= Nat
         )
 
-        assert(te.typeCheck(ty).untag == Right(teExp, tyExp))
+        assert(te.typeCheck(ty).untag == Result.Success(teExp, tyExp))
     }
 
     test("shifting in module projection") {
@@ -195,7 +196,7 @@ class TermTests extends AnyFunSuite {
             "x" ::= (\(0) as (* --> *)) at 2,
             "y" ::= 2,
         ))
-        assert(te.typeCheck(ty).untag == Right(te, ty))
+        assert(te.typeCheck(ty).untag == Result.Success(te, ty))
     }
 
     test("ascriptions") {
@@ -208,7 +209,7 @@ class TermTests extends AnyFunSuite {
             "a" ::= (0 ! "A")
         )
         println(te.typeCheck.untag)
-        assert(te.typeCheck.untag == Right(te, ty))
+        assert(te.typeCheck.untag == Result.Success(te, ty))
     }
 
     test("type operators I") {
@@ -221,7 +222,7 @@ class TermTests extends AnyFunSuite {
             "op" ::= * --> *,
             "a" ::= (0 ! "op") at (* --> *)
         )
-        assert((te typeCheck ty).untag == Right(te, ty))
+        assert((te typeCheck ty).untag == Result.Success(te, ty))
     }
 
     test("type operators II") {
@@ -233,7 +234,7 @@ class TermTests extends AnyFunSuite {
             "op" ::= * --> *,
             "a" ::= (0 ! "op") at * 
         )
-        assert((te typeCheck ty).untag == Right(te, ty))
+        assert((te typeCheck ty).untag == Result.Success(te, ty))
     }
 
     test("recursion") {
@@ -247,7 +248,7 @@ class TermTests extends AnyFunSuite {
             "b" ::= *,
             "c" ::= *
         )
-        assert((te typeCheck ty).untag == Right(te, ty))
+        assert((te typeCheck ty).untag == Result.Success(te, ty))
     }
 
     test("naturals") {
@@ -265,7 +266,7 @@ class TermTests extends AnyFunSuite {
             "b" ::= Nat,
             "c" ::= Nat
         )
-        assert((te typeCheck ty).untag == Right(te, ty))
+        assert((te typeCheck ty).untag == Result.Success(te, ty))
         val tasks = List(
             (te ! "sum" at nat(0) at nat(0), nat(0)),
             (te ! "sum" at nat(1) at nat(0), nat(1)),

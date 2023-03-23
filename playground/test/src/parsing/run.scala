@@ -1,4 +1,4 @@
-package parsing
+
 
 import scala.util.matching.Regex
 import general.Result.{Success, Failure}

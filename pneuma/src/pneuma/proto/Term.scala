@@ -2,6 +2,7 @@ package pneuma.proto
 
 import scala.annotation.targetName
 import Term.{IntElem, ModElem, Mode}
+import general.Result
 
 object Term {
     enum Mode { case Exp, Imp }
@@ -315,14 +316,17 @@ enum Term {
       * @param i the implicit scope
       * @return type-checking result
       */
-    def checkWithSearch(ty: Term, shape: Option[Term], i: I): Either[String, (Term, Term)] =
-        val res = if ty matches shape then Right(this, shape.getOrElse(ty)) else Left(s"$ty does not match $shape")
+    def checkWithSearch(ty: Term, shape: Option[Term], i: I): Result[TypeError, (Term, Term)] =
+        val res = 
+            if ty matches shape 
+            then Result.Success(this, shape.getOrElse(ty)) 
+            else Result.fail(TypeError.Mismatch(shape.get, ty))
         res.orElse { (ty, shape) match
             case (Imp(t1, t2), shape) =>
                 search(t1, i, i) match
-                    case None => Left(s"$ty does not match $shape")
+                    case None => Result.fail(TypeError.Mismatch(shape.get, ty))
                     case Some(arg) => checkWithSearch(t2, shape, i).map { (te, ty) => (App(te, arg), ty) }
-            case _ => Left(s"$ty does not match $shape")
+            case _ => Result.fail(TypeError.Mismatch(shape.get, ty))
         }
 
     /** Generate the type of `this` and an expected `shape` of the type, while simultaneously resolving implicits.
@@ -331,23 +335,23 @@ enum Term {
       * @param shape expected shape of the type
       * @return either term and type with resolved implicits or an error message
       */
-    def transform(g: G, i: I, shape: Option[Term]): Either[String, (Term, Term)] =
+    def transform(g: G, i: I, shape: Option[Term]): Result[TypeError, (Term, Term)] =
         // shape match
         //     case None => println(s"[DEBUG] $this")
         //     case Some(value) => println(s"[DEBUG] $this : $value")
         // typecheck and transform the shape
-        if this == Typ && shape.contains(Typ) then Right(Typ, Typ)
+        if this == Typ && shape.contains(Typ) then Result.Success(Typ, Typ)
         else shape.map(_.transform(g, i, Some(Typ)).map(_(0).eval)) match
             // add implicit in context // SHOULD t1 be checked to be nonempty ?
-            case Some(Right(Imp(t1, t2))) =>
+            case Some(Result.Success(Imp(t1, t2))) =>
                 t1.transform(g, i, Some(Typ)).flatMap((t1te, _) => // SOMETHING IS REALLY WRONG HERE
                     (this >> 1).transform(g >> 1, (i >> 1) + ((t1te >> 1) -> Var(0, None)), Some(t2)).map((te, ty) => (Abs(te), Imp(t1te, ty)))
                 )
-            case Some(Left(msg)) => Left(s"ERROR $msg")
+            case Some(Result.Failure(value)) => Result.Failure(value)
             // otherwise match on this and apply typechecking rules
             case e          => 
                 val shape = e.collect {
-                    case Right(x) => x
+                    case Result.Success(x) => x
                 }
                 this match
                 // checks if Typ matches shape
@@ -357,7 +361,7 @@ enum Term {
                     // checks if variable matches shape
                     case Some(value) => Var(x, tag).checkWithSearch(value, shape, i)
                     // report undefined variable type
-                    case None => Left(s"undefined variable: $this ($g)")
+                    case None => Result.fail(TypeError.Undefined(x.toString))
                 // use shape to generate type for abstraction
                 case Abs(t) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2)) =>    // Done SHOULD t1 be checked to be nonempty
@@ -365,8 +369,8 @@ enum Term {
                         (t.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, Some(t2))).map { (te, t3) =>
                             (Abs(te), Pro(t1, t3))
                         }
-                    case Some(other) => Left(s"product type neccessary to type check abstraction ${Abs(t)} but found $other")
-                    case _ => Left(s"type neccessary to type check abstraction ${Abs(t)}")
+                    case Some(other) => Result.fail(TypeError.Unexpected("product type"))
+                    case _ => Result.fail(TypeError.Unexpected("product type"))
                 // typecheck t1 and use the result to typecheck t2
                 case App(t1, t2) =>
                     t1.transform(g, i, None).flatMap {
@@ -374,7 +378,7 @@ enum Term {
                             t2.transform(g, i, Some(u1)).flatMap { (t2te, t2ty) =>
                                 App(abs, t2te).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i)
                             }
-                        case (_, _) => Left(s"$t1 should have a product type")
+                        case (_, _) => Result.fail(TypeError.Unexpected("product type"))
                     }
                 // parameter and result should be a type
                 case Pro(t1, t2) =>
@@ -388,8 +392,8 @@ enum Term {
                     case Some(value) => 
                         //println(s"CONTEXT $i SHAPE $value")
                         // throw new Exception()
-                        search(value, i, i).map(Right(_, value)).getOrElse(Left(s"no implicit found for $shape"))
-                    case None => Left(s"no implicit found for $shape")
+                        search(value, i, i).map(Result.Success(_, value)).getOrElse(Result.fail(TypeError.NoImplicitFound(shape)))
+                    case None => Result.fail(TypeError.NoImplicitFound(shape))
                 // parameter and result should be a type
                 case Imp(t1, t2) =>
                     t1.transform(g, i, Some(Typ)).flatMap { (u1, _) =>
@@ -408,7 +412,7 @@ enum Term {
                 case Module(fields) => shape match
                     case None => checkModule(fields, Nil, Nil, g, i)
                     case Some(Interface(types)) => checkModuleWithInterface(fields.zip(types), Nil, Nil, g, i)
-                    case Some(_) => Left("you're dumb")
+                    case Some(_) => Result.fail(TypeError.Unexpected("interface"))
 
                 case Interface(fields) => checkInterface(fields, Nil, g, i).flatMap { (te, ty) =>
                     te.checkWithSearch(ty, shape, i)
@@ -420,25 +424,25 @@ enum Term {
                             case Some(IntElem(name, typ, mode)) => 
                                 //println(s"$typ -- $shape [${g.mkString(", ")}]")
                                 Get(te, field).checkWithSearch(typ.replace(0, te), shape, i) // should `te` be shifted?
-                            case _ => Left(s"$fields has no '$field' field")
-                    case _ => Left(s"no '$field' field")
+                            case _ => Result.fail(TypeError.NoField(t, field))
+                    case _ => Result.fail(TypeError.NoField(t, field))
                 }
 
-                case Nat(value) => if value >= 0 then Right(Nat(value), NatType) else Left("natural numbers are >= 0")
-                case NatType => Right(NatType, Typ)
+                case Nat(value) => if value >= 0 then Result.Success(Nat(value), NatType) else Result.fail(TypeError.Message("natural numbers are >= 0"))
+                case NatType => Result.Success(NatType, Typ)
                 case Succ(t) => t.transform(g, i, Some(NatType)).flatMap((te, ty) => Succ(te).checkWithSearch(NatType, shape, i))
                 case Debug(t) => t.transform(g, i, Some(NatType)).flatMap((te, ty) => Debug(te).checkWithSearch(NatType, shape, i))
                 case Match(t, onZero, onSucc) => t.transform(g, i, Some(NatType)).flatMap { (te, ty) =>
                     onZero.transform(g, i, shape).flatMap { (z, zt) => 
                         onSucc.transform((g >> 1) + (0 -> NatType), i, shape.map(_ >> 1)).flatMap { (s, st) =>
-                            if (zt >> 1) === st then Right(Match(te, z, s), zt) else Left(s"the branches have different types: $zt and $st")
+                            if (zt >> 1) === st then Result.Success(Match(te, z, s), zt) else Result.fail(TypeError.Message(s"the branches have different types: $zt and $st"))
                         }
                     }
                 }
 
     /** helper of [[transform]] for checking modules with expected interface */
-    def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, i: I): Either[String, (Module, Interface)] = fields match
-        case Nil => Right(Module(module.reverse), Interface(interface.reverse))
+    def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, i: I): Result[TypeError, (Module, Interface)] = fields match
+        case Nil => Result.Success(Module(module.reverse), Interface(interface.reverse))
         case (ModElem(name, term, mode), IntElem(name1, typ, mode1)) :: next if name == name1 && mode == mode1 => 
             val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1))))
             val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None), name)) }
@@ -447,11 +451,11 @@ enum Term {
             taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
                 checkModuleWithInterface(next, ModElem(name, te, mode) :: module, IntElem(name, typ, mode) :: interface, g, i)
             }
-        case (ModElem(_, _, teMode), IntElem(_, _, tyMode)) :: _ => Left(s"found $teMode for $tyMode")
+        case (ModElem(_, _, teMode), IntElem(_, _, tyMode)) :: _ => Result.fail(TypeError.Message(s"found $teMode for $tyMode"))
     
     /** helper of [[transform]] for checking modules without expected interface */
-    def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I): Either[String, (Module, Interface)] = fields match
-        case Nil => Right(Module(module.reverse), Interface(interface.reverse))
+    def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I): Result[TypeError, (Module, Interface)] = fields match
+        case Nil => Result.Success(Module(module.reverse), Interface(interface.reverse))
         case ModElem(name, term, mode) :: next => 
             val expContext = (g >> 1) + (0 -> Interface(interface))
             val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None), name)) }
@@ -461,8 +465,8 @@ enum Term {
             }
 
     /** helper of [[transform]] for checking interfaces */
-    def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, i: I): Either[String, (Interface, Term.Typ.type)] = fields match
-        case Nil => Right(Interface(checked.reverse), Typ)
+    def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, i: I): Result[TypeError, (Interface, Term.Typ.type)] = fields match
+        case Nil => Result.Success(Interface(checked.reverse), Typ)
         case IntElem(name, typ, mode) :: next =>
             val expContext = (g >> 1) + (0 -> Interface(fields ++ checked))
             val impContext =  (i >> 1) ++ checked.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None), name)) }

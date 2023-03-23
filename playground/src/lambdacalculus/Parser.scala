@@ -7,7 +7,7 @@ import lambdacalculus.Term.Str
 import lambdacalculus.Term.Var
 import parsing.Parser
 import general.Result
-import parsing.StringParsers
+import lambdacalculus.StringParsers
 
 import scala.language.implicitConversions
 
