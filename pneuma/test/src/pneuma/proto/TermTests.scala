@@ -37,6 +37,26 @@ class TermTests extends AnyFunSuite {
         assert((te typeCheck ty).untag == Result.Success(teRes, ty))
     }
 
+    test("implicits IV") {
+        val program = """{ 
+            ?a : { x : Nat } = { x = 42 }, 
+            summon : (A : Type) => A =?> A = \A -> ?, 
+            main : Nat = (summon { y : Nat }).y
+        }.main"""
+        val typ = PneumaParser(program).flatMap(_.convert(Map.empty)).flatMap(_.typeCheck).map(_(1))
+        assert(typ == Result.Success(Nat))
+    }
+
+    test("implicits V") {
+        val program = """{ 
+            ?a : Nat => Nat = \x -> S x, 
+            summon : (A : Type) => A =?> A = \A -> ?, 
+            main : Nat = summon (Nat => Nat) 42
+        }.main"""
+        val typ = PneumaParser(program).flatMap(_.convert(Map.empty)).flatMap(_.typeCheck).map(_(1))
+        assert(typ == Result.Success(Nat))
+    }
+
     test("modules") {
         val te = mod(
             "id" := \(0),

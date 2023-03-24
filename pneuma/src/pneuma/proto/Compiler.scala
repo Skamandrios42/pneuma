@@ -8,7 +8,7 @@ object Compiler {
         require(args.length == 1, "exactly one argument required!")
         val fileName = args(0)
         require(fileName.endsWith(".pneuma"), "wrong file extension!")
-        val done = for 
+        val done = for
             program <- PneumaParser.fromFile(fileName)
             term    <- program.convert(Map.empty)
             res     <- term.typeCheck

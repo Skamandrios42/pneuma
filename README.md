@@ -28,7 +28,7 @@ A description of this project is coming soon ...
  - testing
  - make base types (Strings? or wait for 0.1.0)
  - use ZIO for speedup?
- - 'no y field' bug in implicits.pneuma
+ - 'no y field' bug in implicits.pneuma (missing implicits resolution in Application and Projection check)
 
 ## version 0.1.0
  - inductive datatypes

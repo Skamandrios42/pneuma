@@ -2,6 +2,7 @@ package lambdacalculus
 
 import general.Result.{Success, Failure}
 import general.Result
+import parsing.Parser
 import scala.util.matching.Regex
 import languageFeature.implicitConversions
 

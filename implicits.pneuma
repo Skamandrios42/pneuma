@@ -4,5 +4,7 @@
 
 summon : (A : Type) => A =?> A = \A -> ?,
 
+otherError : Nat = summon (Nat => Nat) 3,
+
 test : Nat = (summon { y : Nat }).y, 
 main : Nat = debug test
