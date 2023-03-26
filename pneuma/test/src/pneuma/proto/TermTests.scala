@@ -41,7 +41,7 @@ class TermTests extends AnyFunSuite {
         val program = """{ 
             ?a : { x : Nat } = { x = 42 }, 
             summon : (A : Type) => A =?> A = \A -> ?, 
-            main : Nat = (summon { y : Nat }).y
+            main : Nat = (summon { x : Nat }).x
         }.main"""
         val typ = PneumaParser(program).flatMap(_.convert(Map.empty)).flatMap(_.typeCheck).map(_(1))
         assert(typ == Result.Success(Nat))

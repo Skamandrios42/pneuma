@@ -7,6 +7,10 @@ import scala.util.matching.Regex
 import languageFeature.implicitConversions
 
 object StringParsers {
+
+    given Ordering[StringError] with
+        def compare(a: StringError, b: StringError) = a.pos compare b.pos
+
     case class StringError(expected: String, found: String, pos: Int) {
         override def toString = s"[$pos] expected '$expected', but found '$found'"
     }

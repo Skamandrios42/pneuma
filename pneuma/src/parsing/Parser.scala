@@ -2,7 +2,8 @@ package parsing
 
 import general.Result
 import general.Region
-import Parser.HasPos
+import parsing.Parser.AttachRegion
+import parsing.Parser.GetPos
 
 object Parser {
 
@@ -18,8 +19,12 @@ object Parser {
         def result[E, A](value: => Result[E, A]): Parser[S, E, A] = (value, _)
     }
 
-    trait HasPos[A] {
+    trait AttachRegion[A] {
+        def file: Option[String]
         extension (self: A) def attach(region: Region): A
+    }
+    trait GetPos[S] {
+        extension (self: S) def getIndex: Int
     }
 
 }
@@ -35,22 +40,22 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
         this(_) match
             case (Result.Success(value), src) => (Result.Success(f(value)), src)
             case (Result.Failure(value), src) => (Result.Failure(value), src)
+    def track[A1 >: A](using AttachRegion[A1], GetPos[S]): Parser[S, E, A1] = src =>
+        val start = src.getIndex
+        val (res, newSrc) = this(src)
+        val end = newSrc.getIndex
+        (res.map(_.attach(Region(summon[AttachRegion[A1]].file, start, end))), newSrc)
 
-    // def recover[E1 >: E, B](f: E1 => B): Parser[S, Nothing, A | B] = 
-    //     this(_) match
-    //         case (Success(value), src) => (Success(value), src)
-    //         case (Failure(value), src) => (Success(f(value)), src)
-
+    def tracked(file: Option[String])(using GetPos[S]): Parser[S, E, (A, Region)] = src =>
+        val start = src.getIndex
+        val (res, newSrc) = this(src)
+        val end = newSrc.getIndex
+        (res.map((_, Region(file, start, end))), newSrc)
 
     def transform[E1 >: E, A1 >: A, F, B](fa: A1 => B, fe: E1 => F): Parser[S, F, B] =
         this(_) match
             case (Result.Success(value), src) => (Result.Success(fa(value)), src)
             case (Result.Failure(value), src) => (Result.Failure(value.map(fe)), src)
-
-    // def onFailure[E1 >: E, F, B](f: E1 => Result[F, B]): Parser[S, F, A | B] = 
-    //     this(_) match
-    //         case (Result.Success(value), src) => (Result.Success(value), src)
-    //         case (Result.Failure(value), src) => (Result.Failure(value.map(f)), src)
 
     def flatMap[B, F](f: A => Parser[S, F, B]): Parser[S, E | F, B] =
         this(_) match
@@ -79,18 +84,18 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
             case (Result.Success(value), src) => (Result.Success(value), src)
             case (Result.Failure(value), _)   => that(src)
 
-    def or[E1 >: E, F, B](that: => Parser[S, F, B]): Parser[S, E | F, A | B] = src =>
+    def or[E1 >: E, F, B](that: => Parser[S, F, B])(using order: Ordering[E1 | F]): Parser[S, E | F, A | B] = src =>
         this(src) match
             case (Result.Success(value), src1) => (Result.Success(value), src1)
             case (Result.Failure(e), src1)   => that(src) match
                 case (Result.Success(value), src2) => (Result.Success(value), src2)
-                case (Result.Failure(f), src2)   => (Result.Failure(e ++ f), src1)
+                case (Result.Failure(f), src2)   => if order.gt(e.min, f.min) then (Result.Failure(e), src1) else (Result.Failure(f), src1)
 
     def repeat: Parser[S, Nothing, List[A]] = (
         for head <- this
             tail <- repeat
         yield head :: tail) orElse Parser[S].success(List.empty)
-    
+
     def repeatsep[F, B, A1 >: A](that: Parser[S, F, B]): Parser[S, E, List[A]] = 
         for head <- this
             tail <- that alternate this

@@ -329,6 +329,13 @@ enum Term {
             case _ => Result.fail(TypeError.Mismatch(shape.get, ty))
         }
 
+    def searchAll(ty: Term, i: I): Result[TypeError, (Term, Term)] = ty match
+        case Imp(t1, t2) => search(t1, i, i) match
+            case Some(value) => 
+                this.searchAll(t2, i).map { (thi, thy) => (App(thi, value), thy) }
+            case None => Result.fail(TypeError.NoImplicitFound(Some(t1)))
+        case other => Result.succeed(this, ty)
+
     /** Generate the type of `this` and an expected `shape` of the type, while simultaneously resolving implicits.
       * @param g explicit scope
       * @param i implicit scope
@@ -373,12 +380,14 @@ enum Term {
                     case _ => Result.fail(TypeError.Unexpected("product type"))
                 // typecheck t1 and use the result to typecheck t2
                 case App(t1, t2) =>
-                    t1.transform(g, i, None).flatMap {
-                        case (abs, Pro(u1, u2)) =>
-                            t2.transform(g, i, Some(u1)).flatMap { (t2te, t2ty) =>
-                                App(abs, t2te).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i)
-                            }
-                        case (_, _) => Result.fail(TypeError.Unexpected("product type"))
+                    t1.transform(g, i, None).flatMap { (te, ty) =>
+                        te.searchAll(ty, i).flatMap {
+                            case (abs, Pro(u1, u2)) =>
+                                t2.transform(g, i, Some(u1)).flatMap { (t2te, t2ty) =>
+                                    App(abs, t2te).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i)
+                                }
+                            case (_, _) => Result.fail(TypeError.Unexpected("product type"))
+                        }
                     }
                 // parameter and result should be a type
                 case Pro(t1, t2) =>
@@ -418,14 +427,18 @@ enum Term {
                     te.checkWithSearch(ty, shape, i)
                 }
 
-                case Get(t, field) => t.transform(g, i, None).flatMap { 
-                    case (te, Interface(fields)) => 
-                        fields.find(_.name == field) match
-                            case Some(IntElem(name, typ, mode)) => 
-                                //println(s"$typ -- $shape [${g.mkString(", ")}]")
-                                Get(te, field).checkWithSearch(typ.replace(0, te), shape, i) // should `te` be shifted?
-                            case _ => Result.fail(TypeError.NoField(t, field))
-                    case _ => Result.fail(TypeError.NoField(t, field))
+                case Get(t, field) => t.transform(g, i, None).flatMap { (te, ty) =>
+                    te.searchAll(ty, i).flatMap {
+                        case (te, Interface(fields)) => 
+                            fields.find(_.name == field) match
+                                case Some(IntElem(name, typ, mode)) =>
+                                    //println(s"$typ -- $shape [${g.mkString(", ")}]")
+                                    Get(te, field).checkWithSearch(typ.replace(0, te), shape, i) // should `te` be shifted?
+                                case _ => Result.fail(TypeError.NoField(t, field))
+                        case (te, ty) => 
+                            println(s"found type $ty")
+                            Result.fail(TypeError.NoField(t, field))
+                    }
                 }
 
                 case Nat(value) => if value >= 0 then Result.Success(Nat(value), NatType) else Result.fail(TypeError.Message("natural numbers are >= 0"))

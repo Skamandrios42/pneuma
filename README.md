@@ -24,13 +24,18 @@ A description of this project is coming soon ...
 ## version 0.0.0 -- release
  - initialize repository DONE
  - make publishing setup DONE
- - clean project -- make it more consistent
+
+ - missing implicits resolution in Application and Projection check DONE
+ - add positions to Parser and Program IN WORK
+ - add positions to Term and typechecking
+
  - testing
- - make base types (Strings? or wait for 0.1.0)
- - use ZIO for speedup?
- - 'no y field' bug in implicits.pneuma (missing implicits resolution in Application and Projection check)
+ - clean project
 
 ## version 0.1.0
+ - use ZIO for speedup?
+ - better error handling
+ - make base types (Strings?)
  - inductive datatypes
  - make type classes possible
  - type classes for literal macros
