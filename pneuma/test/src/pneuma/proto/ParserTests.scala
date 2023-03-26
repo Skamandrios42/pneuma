@@ -31,7 +31,7 @@ class ParserTests extends AnyFunSuite {
     }
 
     test("file") {
-        val program = PneumaParser.fromFile("program.pneuma")
+        val program = PneumaParser.fromFile("example_programs/program.pneuma")
         val term = program.map(_.convert(Map.empty))
         println(program)
         println("---")
@@ -44,7 +44,7 @@ class ParserTests extends AnyFunSuite {
     }
 
     test("generator") {
-        val program = PneumaParser.fromFile("generator.pneuma")
+        val program = PneumaParser.fromFile("example_programs/generator.pneuma")
         val term = program.map(_.convert(Map.empty))
         println(program)
         println("---")
@@ -55,6 +55,6 @@ class ParserTests extends AnyFunSuite {
         println("---")
         checked.map(_.foreach((a, b) => a.eval))
         println("--- NOW GENERATING")
-        checked.foreach(_.foreach((a, _) => Generator("Generator", a, "generated")))
+        checked.foreach(_.foreach((a, _) => Generator("Generator", a, "example_programs")))
     }
 }
