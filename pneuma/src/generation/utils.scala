@@ -52,14 +52,6 @@ extension (mv: MethodVisitor)
         )
         mv.visitInvokeDynamicInsn(nameOfSAM, descriptorOfDynamicCall, bootstrap, funType, implementation, funType)
 
-class Namer(val base: String) {
-    private var index = 0
-    def next() =
-        val name = f"$base$index%04d"
-        index += 1
-        name
-}
-
 class Counter {
     private var index = 0
     def now() = index

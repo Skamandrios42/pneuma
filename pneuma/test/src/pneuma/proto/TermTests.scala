@@ -44,7 +44,7 @@ class TermTests extends AnyFunSuite {
             main : Nat = (summon { x : Nat }).x
         }.main"""
         val typ = PneumaParser(program).flatMap(_.convert(Map.empty)).flatMap(_.typeCheck).map(_(1))
-        assert(typ == Result.Success(Nat))
+        assert(typ.map(_.eraseRegion) == Result.Success(Nat))
     }
 
     test("implicits V") {
@@ -54,7 +54,7 @@ class TermTests extends AnyFunSuite {
             main : Nat = summon (Nat => Nat) 42
         }.main"""
         val typ = PneumaParser(program).flatMap(_.convert(Map.empty)).flatMap(_.typeCheck).map(_(1))
-        assert(typ == Result.Success(Nat))
+        assert(typ.map(_.eraseRegion) == Result.Success(Nat))
     }
 
     test("modules") {

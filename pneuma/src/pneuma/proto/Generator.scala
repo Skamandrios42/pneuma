@@ -4,7 +4,6 @@ import org.objectweb.asm.Opcodes.*
 import generation.defineClass
 import generation.defineMethod
 import generation.mkLambda
-import generation.Namer
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Handle
@@ -25,10 +24,10 @@ object Generator {
     }
 
     def generate(name: String, cw: ClassWriter, mv: MethodVisitor, term: Term, context: Map[Int, Int], anonCounter: Counter, modCounter: Counter): Unit = term match
-        case Term.Var(x, tagged) =>
+        case Term.Var(x, tagged, _) =>
             // puts local `x` on the stack
             mv.visitVarInsn(ALOAD, context(x))
-        case Term.Abs(t) =>
+        case Term.Abs(t, _) =>
             val anon = f"anon$$${anonCounter.next()}%04d"
             val sig =  s"(${"Ljava/lang/Object;" * (context.size + 1)})Ljava/lang/Object;"
             // generate `body` as static function
@@ -45,12 +44,12 @@ object Generator {
                 Handle(H_INVOKESTATIC, name, anon, sig, false)
             )
 
-        case Term.App(t1, t2) =>
+        case Term.App(t1, t2, _) =>
             generate(name, cw, mv, t1, context, anonCounter, modCounter) // put `abs` on the stack
             generate(name, cw, mv, t2, context, anonCounter, modCounter) // put `arg` on the stack
             mv.visitMethodInsn(INVOKEINTERFACE, "java/util/function/Function", "apply", "(Ljava/lang/Object;)Ljava/lang/Object;", true)
         
-        case Term.Module(fields) =>
+        case Term.Module(fields, _) =>
             // println(fields)
             mv.visitTypeInsn(NEW, "java/util/HashMap")
             mv.visitInsn(DUP)
@@ -80,7 +79,7 @@ object Generator {
                 mv.visitMethodInsn(INVOKEVIRTUAL, "java/util/HashMap", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false)
                 mv.visitInsn(POP)
 
-        case Term.Get(t, field) =>
+        case Term.Get(t, field, _) =>
             // erzeuge das Modul
             generate(name, cw, mv, t, context, anonCounter, modCounter)
             mv.visitTypeInsn(CHECKCAST, "java/util/HashMap");
@@ -92,14 +91,14 @@ object Generator {
             mv.visitVarInsn(ALOAD, context.size)
             mv.visitMethodInsn(INVOKEINTERFACE, "java/util/function/Function", "apply", "(Ljava/lang/Object;)Ljava/lang/Object;", true)
 
-        case Term.As(te, ty) =>
+        case Term.As(te, ty, _) =>
             generate(name, cw, mv, te, context, anonCounter, modCounter)
 
-        case Term.Nat(value) =>
+        case Term.Nat(value, _) =>
             mv.visitIntInsn(BIPUSH, value)
             mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
 
-        case Term.Succ(t) =>
+        case Term.Succ(t, _) =>
             generate(name, cw, mv, t, context, anonCounter, modCounter)
             mv.visitTypeInsn(CHECKCAST, "java/lang/Integer");
             mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
@@ -107,7 +106,7 @@ object Generator {
             mv.visitInsn(IADD)
             mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
 
-        case Term.Debug(t) =>
+        case Term.Debug(t, _) =>
             // get out field and evaluate `t`
             mv.visitFieldInsn(GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
             generate(name, cw, mv, t, context, anonCounter, modCounter)
@@ -117,7 +116,7 @@ object Generator {
             mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
             mv.visitVarInsn(ALOAD, context.size)
 
-        case Term.Match(t, onZero, onSucc) =>
+        case Term.Match(t, onZero, onSucc, _) =>
             val second = new Label
             val end = new Label
             generate(name, cw, mv, t, context, anonCounter, modCounter)

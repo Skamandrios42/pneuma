@@ -26,6 +26,10 @@ case class Region(file: Option[String], start: Int, end: Int) {
         case Some(value) => s"$value, $start to $end"
 }
 
+trait HasRegion {
+    def r: Region
+}
+
 object Pos {
     def from(index: Int, content: Seq[String]) =
         var i = index
