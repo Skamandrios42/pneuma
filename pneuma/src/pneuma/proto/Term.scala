@@ -356,13 +356,13 @@ enum Term extends HasRegion {
         val res = 
             if ty matches shape 
             then Result.Success(this, shape.getOrElse(ty)) 
-            else Result.fail(TypeError.Mismatch(shape.get, ty))
+            else Result.fail(TypeError.Mismatch(shape.get, ty, this.r))
         res.orElse { (ty, shape) match
             case (Imp(t1, t2, _), shape) =>
                 search(t1, i, i) match
-                    case None => Result.fail(TypeError.Mismatch(shape.get, ty))
+                    case None => Result.fail(TypeError.Mismatch(shape.get, ty, this.r))
                     case Some(arg) => checkWithSearch(t2, shape, i).map { (te, ty) => (App(te, arg, this.r), ty) }
-            case _ => Result.fail(TypeError.Mismatch(shape.get, ty))
+            case _ => Result.fail(TypeError.Mismatch(shape.get, ty, this.r))
         }
 
     def searchAll(ty: Term, i: I): Result[TypeError, (Term, Term)] = ty match

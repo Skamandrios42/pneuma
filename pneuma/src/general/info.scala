@@ -4,7 +4,7 @@ import java.nio.file.Path
 import java.io.File
 
 case class Region(file: Option[String], start: Int, end: Int) {
-    
+
     def extract(content: String) =
         content.drop(start).dropRight(content.length() - end)
     def extract(content: Seq[String]) = 
@@ -20,6 +20,18 @@ case class Region(file: Option[String], start: Int, end: Int) {
         else s"$pre${Pos.from(start, content)} to $pre${Pos.from(end, content)}"
 
     def join(other: Region) = Region(file, start, other.end)
+
+    def mark(content: Seq[String], indent: Int) = {
+        val startPos = Pos.from(start, content)
+        val endPos = Pos.from(end, content)
+        val len = (endPos.char - startPos.char)
+        if startPos.line == endPos.line then 
+            val line = content(startPos.line)
+            val marker = (" " * (startPos.char + indent)) ++ ("^" * len)
+            val colored =  (" " * indent) ++ line.take(startPos.char) ++ Console.RED ++ line.drop(startPos.char).take(len) ++ Console.RESET ++ line.drop(startPos.char + len)
+            colored ++ "\n" ++ marker
+        else ""
+    }
 
     override def toString: String = file match
         case None => s"$start to $end"

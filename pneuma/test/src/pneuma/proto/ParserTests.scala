@@ -3,6 +3,8 @@ package pneuma.proto
 import org.scalatest.funsuite.AnyFunSuite
 import java.nio.file.Files
 import java.nio.file.Path
+import general.Result
+import scala.collection.immutable.ArraySeq
 
 class ParserTests extends AnyFunSuite {
     test("parsing") {
@@ -55,6 +57,22 @@ class ParserTests extends AnyFunSuite {
         println("---")
         checked.map(_.foreach((a, b) => a.eval))
         println("--- NOW GENERATING")
-        checked.foreach(_.foreach((a, _) => Generator("Generator", a, "example_programs")))
+        checked.foreach(_.foreach((a, _) => Generator("Generator", a)))
+    }
+
+    test("message") {
+        val source = """{ plus = \haha -> \y -> haha match { y, \k -> S (this.plus k y) } } : { plus : Type => Nat => Nat }"""
+        val program = PneumaParser(source)
+        val term = program.flatMap(_.convert(Map.empty))
+        println(source)
+        println("---")
+        println(program)
+        println("---")
+        println(term)
+        println("---")
+        term.flatMap(_.typeCheck) match
+            case Result.Success(value) => println(value)
+            case Result.Failure(values) => 
+                values.foreach(ex => println(ex.format(ArraySeq.unsafeWrapArray(source.split('\n')))))
     }
 }

@@ -19,5 +19,4 @@ enum TypeError extends CompileError {
         case NoImplicitFound(shape, region) => s"no implicit found for $shape"
         case NoField(t, field, region) => s"$t has no $field field"
         case Message(msg, region) => msg
-    override def format(content: Seq[String]): String = toString
 }

@@ -11,5 +11,4 @@ object ParseError {
 case class ParseError(expected: String, found: String, region: Region) extends CompileError {
     def name: String = "Syntax Error"
     def message: String = s"expected '$expected', but found '$found'"
-    def format(content: Seq[String]): String = toString
 }
