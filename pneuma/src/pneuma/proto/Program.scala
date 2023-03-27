@@ -31,7 +31,7 @@ enum Program extends HasRegion {
 
     def convert(ctx: Map[String, Term]): Result[TypeError, Term] = this match
         case Program.Var(x, r) if ctx.contains(x) => Result.succeed(ctx(x).rOf(Term.Var(0, None, r)))
-        case Program.Var(x, r) => Result.fail(TypeError.Undefined(x, Region(None, 0, 0)))
+        case Program.Var(x, r) => Result.fail(TypeError.Undefined(x, r))
         case Program.Abs(x, t, r) => t.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(Term.Abs(_, r))
         case Program.App(t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx).map(b => Term.App(a, b, r)))
         case Program.Typ(r) => Result.succeed(Term.Typ(r))

@@ -369,7 +369,7 @@ enum Term extends HasRegion {
         case Imp(t1, t2, _) => search(t1, i, i) match
             case Some(value) => 
                 this.searchAll(t2, i).map { (thi, thy) => (App(thi, value, this.r), thy) }
-            case None => Result.fail(TypeError.NoImplicitFound(Some(t1)))
+            case None => Result.fail(TypeError.NoImplicitFound(Some(t1), this.r))
         case other => Result.succeed(this, ty)
 
     /** Generate the type of `this` and an expected `shape` of the type, while simultaneously resolving implicits.
@@ -404,7 +404,7 @@ enum Term extends HasRegion {
                     // checks if variable matches shape
                     case Some(value) => Var(x, tag, r).checkWithSearch(value, shape, i)
                     // report undefined variable type
-                    case None => Result.fail(TypeError.Undefined(x.toString))
+                    case None => Result.fail(TypeError.Undefined(x.toString, this.r))
                 // use shape to generate type for abstraction
                 case Abs(t, r1) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2, r2)) =>    // Done SHOULD t1 be checked to be nonempty
@@ -412,8 +412,8 @@ enum Term extends HasRegion {
                         (t.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, Some(t2))).map { (te, t3) =>
                             (Abs(te, r1), Pro(t1, t3, r2))
                         }
-                    case Some(other) => Result.fail(TypeError.Unexpected("product type"))
-                    case _ => Result.fail(TypeError.Unexpected("product type"))
+                    case Some(other) => Result.fail(TypeError.Unexpected("product type", this.r))
+                    case _ => Result.fail(TypeError.Unexpected("product type", this.r))
                 // typecheck t1 and use the result to typecheck t2
                 case App(t1, t2, r1) =>
                     t1.transform(g, i, None).flatMap { (te, ty) =>
@@ -422,7 +422,7 @@ enum Term extends HasRegion {
                                 t2.transform(g, i, Some(u1)).flatMap { (t2te, t2ty) =>
                                     App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i)
                                 }
-                            case (_, _) => Result.fail(TypeError.Unexpected("product type"))
+                            case (_, _) => Result.fail(TypeError.Unexpected("product type", this.r))
                         }
                     }
                 // parameter and result should be a type
@@ -437,8 +437,8 @@ enum Term extends HasRegion {
                     case Some(value) => 
                         //println(s"CONTEXT $i SHAPE $value")
                         // throw new Exception()
-                        search(value, i, i).map(Result.Success(_, value)).getOrElse(Result.fail(TypeError.NoImplicitFound(shape)))
-                    case None => Result.fail(TypeError.NoImplicitFound(shape))
+                        search(value, i, i).map(Result.Success(_, value)).getOrElse(Result.fail(TypeError.NoImplicitFound(shape, this.r)))
+                    case None => Result.fail(TypeError.NoImplicitFound(shape, this.r))
                 // parameter and result should be a type
                 case Imp(t1, t2, r) =>
                     t1.transform(g, i, Some(Typ(t1.r))).flatMap { (u1, _) =>
@@ -457,7 +457,7 @@ enum Term extends HasRegion {
                 case Module(fields, _) => shape match
                     case None => checkModule(fields, Nil, Nil, g, i)
                     case Some(Interface(types, _)) => checkModuleWithInterface(fields.zip(types), Nil, Nil, g, i)
-                    case Some(_) => Result.fail(TypeError.Unexpected("interface"))
+                    case Some(_) => Result.fail(TypeError.Unexpected("interface", this.r))
 
                 case Interface(fields, _) => checkInterface(fields, Nil, g, i).flatMap { (te, ty) =>
                     te.checkWithSearch(ty, shape, i)
@@ -470,21 +470,21 @@ enum Term extends HasRegion {
                                 case Some(IntElem(name, typ, mode)) =>
                                     //println(s"$typ -- $shape [${g.mkString(", ")}]")
                                     Get(te, field, r).checkWithSearch(typ.replace(0, te), shape, i) // should `te` be shifted?
-                                case _ => Result.fail(TypeError.NoField(t, field))
+                                case _ => Result.fail(TypeError.NoField(t, field, this.r))
                         case (te, ty) => 
                             println(s"found type $ty")
-                            Result.fail(TypeError.NoField(t, field))
+                            Result.fail(TypeError.NoField(t, field, this.r))
                     }
                 }
 
-                case Nat(value, r) => if value >= 0 then Result.Success(Nat(value, r), NatType(r)) else Result.fail(TypeError.Message("natural numbers are >= 0"))
+                case Nat(value, r) => if value >= 0 then Nat(value, r).checkWithSearch(NatType(r), shape, i) else Result.fail(TypeError.Message("natural numbers are >= 0", this.r))
                 case NatType(r) => Result.Success(NatType(r), Typ(r))
                 case Succ(t, r) => t.transform(g, i, Some(NatType(r))).flatMap((te, ty) => Succ(te, r).checkWithSearch(NatType(r), shape, i))
                 case Debug(t, r) => t.transform(g, i, Some(NatType(r))).flatMap((te, ty) => Debug(te, r).checkWithSearch(NatType(r), shape, i))
                 case Match(t, onZero, onSucc, r) => t.transform(g, i, Some(NatType(r))).flatMap { (te, ty) =>
                     onZero.transform(g, i, shape).flatMap { (z, zt) => 
                         onSucc.transform((g >> 1) + (0 -> NatType(r)), i, shape.map(_ >> 1)).flatMap { (s, st) =>
-                            if (zt >> 1) === st then Result.Success(Match(te, z, s, r), zt) else Result.fail(TypeError.Message(s"the branches have different types: $zt and $st"))
+                            if (zt >> 1) === st then Result.Success(Match(te, z, s, r), zt) else Result.fail(TypeError.Message(s"the branches have different types: $zt and $st", this.r))
                         }
                     }
                 }
@@ -500,7 +500,7 @@ enum Term extends HasRegion {
             taggedTerm.transform(expContext, impContext, Some(taggedType)).flatMap { (te, ty) =>
                 checkModuleWithInterface(next, ModElem(name, te, mode) :: module, IntElem(name, typ, mode) :: interface, g, i)
             }
-        case (ModElem(_, _, teMode), IntElem(_, _, tyMode)) :: _ => Result.fail(TypeError.Message(s"found $teMode for $tyMode"))
+        case (ModElem(_, _, teMode), IntElem(_, _, tyMode)) :: _ => Result.fail(TypeError.Message(s"found $teMode for $tyMode", this.r))
     
     /** helper of [[transform]] for checking modules without expected interface */
     def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I): Result[TypeError, (Module, Interface)] = fields match

@@ -107,7 +107,7 @@ object PneumaParser {
     lazy val expr = (query or typ or natType or natural or product or abstraction or variable or typedModule or module or interface).track
 
     lazy val get: PParser = (expr.track <*> (".".spaced *> ident.tracked(None)).repeat).map {
-        case (te, seq) => seq.foldLeft(te) { case (t, (f, r)) => Program.Get(t, f, r) }
+        case (te, seq) => seq.foldLeft(te) { case (t, (f, r)) => Program.Get(t, f, t.r join r) }
     }
 
     lazy val matchStatement = (get <*> ("match".spaced <*> "{" <*> imp.spaced <*> "," <*> abstraction.track.spaced <*> "}").opt).map {
@@ -115,7 +115,14 @@ object PneumaParser {
         case (te, None) => te
     }.track
 
-    lazy val app: PParser = (matchStatement.track <* skip).fold {
+    lazy val app: PParser = (matchStatement.track <*> (skip *> matchStatement.tracked(None)).repeat).map {
+        case (te, seq) => seq.foldLeft(te) { 
+            case (Program.Var("S", r), (arg, r1)) => Program.Succ(arg).attach(r join r1)
+            case (Program.Var("debug", r), (arg, r1)) => Program.Debug(arg).attach(r join r1)
+            case (abs, (arg, r1)) => Program.App(abs, arg, abs.r join r1) }
+    }
+
+    lazy val app2: PParser = (matchStatement.track <* skip).fold { // here is the error
         case (Program.Var("S", r), arg) => Program.Succ(arg).attach(r join arg.r)
         case (Program.Var("debug", r), arg) => Program.Debug(arg).attach(r join arg.r)
         case (abs, arg) => Program.App(abs, arg).attach(abs.r join arg.r)

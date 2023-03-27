@@ -19,18 +19,22 @@ case class Region(file: Option[String], start: Int, end: Int) {
         then s"$pre${Pos.from(start, content)}"
         else s"$pre${Pos.from(start, content)} to $pre${Pos.from(end, content)}"
 
-    def join(other: Region) = Region(file, start, other.end)
+    def join(other: Region) = Region(file, this.start, other.end)
 
     def mark(content: Seq[String], indent: Int) = {
         val startPos = Pos.from(start, content)
         val endPos = Pos.from(end, content)
         val len = (endPos.char - startPos.char)
-        if startPos.line == endPos.line then 
+        if startPos == endPos then
+            val line = (" " * indent) ++ content(startPos.line)
+            val marker = (" " * (startPos.char + indent)) ++ "^"
+            line ++ "\n" ++ marker
+        else if startPos.line == endPos.line then 
             val line = content(startPos.line)
             val marker = (" " * (startPos.char + indent)) ++ ("^" * len)
-            val colored =  (" " * indent) ++ line.take(startPos.char) ++ Console.RED ++ line.drop(startPos.char).take(len) ++ Console.RESET ++ line.drop(startPos.char + len)
+            val colored = (" " * indent) ++ line.take(startPos.char) ++ Console.RED ++ line.drop(startPos.char).take(len) ++ Console.RESET ++ line.drop(startPos.char + len)
             colored ++ "\n" ++ marker
-        else ""
+        else " ... not implemented ..."
     }
 
     override def toString: String = file match
@@ -47,11 +51,15 @@ object Pos {
         var i = index
         var line = 0
         var char = 0
-        for s <- content do
-            if s.length < i then
-                i -= s.length
+        var done = false
+        for s <- content if !done do
+            if s.length < i 
+            then
+                i -= s.length + 1
                 line += 1
-            else char = i
+            else
+                char = i
+                done = true
         Pos(line, char)
 }
 

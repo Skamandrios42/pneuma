@@ -5,12 +5,12 @@ import general.Region
 import general.Pos
 
 enum TypeError extends CompileError {
-    case Mismatch(expected: Term, found: Term, region: Region = Region(None, 0, 0))
-    case Unexpected(expected: String, region: Region = Region(None, 0, 0))
-    case Undefined(variable: String, region: Region = Region(None, 0, 0))
-    case NoImplicitFound(shape: Option[Term], region: Region = Region(None, 0, 0))
-    case NoField(t: Term, field: String, region: Region = Region(None, 0, 0))
-    case Message(msg: String, region: Region = Region(None, 0, 0))
+    case Mismatch(expected: Term, found: Term, region: Region)
+    case Unexpected(expected: String, region: Region)
+    case Undefined(variable: String, region: Region)
+    case NoImplicitFound(shape: Option[Term], region: Region)
+    case NoField(t: Term, field: String, region: Region)
+    case Message(msg: String, region: Region)
     def name = "Type Error"
     def message: String = this match
         case Mismatch(expected, found, region) => s"expected '$expected', but found '$found'"
