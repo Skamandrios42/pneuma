@@ -20,5 +20,5 @@ class Source(val text: String, val index: Int) {
             case Some(s) =>
                 val newSource = Source(text, index + s.length())
                 Result.succeed(newSource, Region(None, index, newSource.index), s)
-            case None => (Result.fail(ParseError(r.toString, text.take(10).drop(index), Region(file, index, index))))
+            case None => (Result.fail(ParseError(r.toString, text.drop(index).take(10), Region(file, index, index))))
 }

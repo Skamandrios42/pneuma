@@ -2,11 +2,21 @@ package pneuma.proto
 
 import Program.{ModElem, IntElem, Mode}
 import general.*
+import generation.Counter
 
 object Program {
     enum Mode { case Exp, Imp }
-    case class ModElem(name: String, term: Program, mode: Mode)
-    case class IntElem(name: String, term: Program, mode: Mode)
+    case class ModElem(name: String, term: Program, mode: Mode) {
+        override def toString(): String = mode match
+            case Mode.Exp => s"$name = $term"
+            case Mode.Imp => s"?$name = $term"
+    }
+    case class IntElem(name: String, term: Program, mode: Mode) {
+        override def toString(): String = mode match
+            case Mode.Exp => s"$name : $term"
+            case Mode.Imp => s"?$name : $term"
+    }
+
 }
 
 enum Program extends HasRegion {
@@ -32,12 +42,12 @@ enum Program extends HasRegion {
     def convert(ctx: Map[String, Term]): Result[TypeError, Term] = this match
         case Program.Var(x, r) if ctx.contains(x) => Result.succeed(ctx(x).rOf(Term.Var(0, None, r)))
         case Program.Var(x, r) => Result.fail(TypeError.Undefined(x, r))
-        case Program.Abs(x, t, r) => t.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(Term.Abs(_, r))
+        case Program.Abs(x, t, r) => t.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(Term.Abs(_, r, x))
         case Program.App(t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx).map(b => Term.App(a, b, r)))
         case Program.Typ(r) => Result.succeed(Term.Typ(r))
         case Program.Phi(r) => Result.succeed(Term.Phi(r))
-        case Program.Pro(Some(x), t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(b => Term.Pro(a, b, r)))
-        case Program.Pro(None, t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx >> 1).map(b => Term.Pro(a, b, r)))
+        case Program.Pro(Some(x), t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(b => Term.Pro(a, b, r, x)))
+        case Program.Pro(None, t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx >> 1).map(b => Term.Pro(a, b, r, "")))
         case Program.Imp(t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx >> 1).map(b => Term.Imp(a, b, r)))
         case Program.Module(fields, r) => fields.map {
             case ModElem(name, term, Mode.Exp) => 
@@ -62,6 +72,25 @@ enum Program extends HasRegion {
         case Program.Succ(t, r) => t.convert(ctx).map(Term.Succ(_, r))
         case Program.Debug(t, r) => t.convert(ctx).map(Term.Debug(_, r))
         case Program.Match(t, onZero, Program.Abs(x, onSucc, _), r) => 
-            t.convert(ctx).flatMap(a => onZero.convert(ctx).flatMap(b => onSucc.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(c => Term.Match(a, b, c, r))))
+            t.convert(ctx).flatMap(a => onZero.convert(ctx).flatMap(b => onSucc.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(c => Term.Match(a, b, c, r, x))))
 
+    override def toString: String = this match
+        case Var(x, r) => x
+        case Abs(x, t, r) => s"(\\$x -> $t)"
+        case App(t1, t2, r) => s"($t1 $t2)"
+        case Typ(r) => "Type"
+        case Phi(r) => "?"
+        case Pro(Some(x), t1, t2, r) => s"(($x : $t1) => $t2)"
+        case Pro(None, t1, t2, r) => s"($t1 => $t2)"
+        case Imp(t1, t2, r) => s"($t1 =?> $t2)"
+        case Module(fields, r) => s"{ ${fields.mkString(", ")} }"
+        case Interface(fields, r) => s"{ ${fields.mkString(", ")} }"
+        case Get(t, field, r) => s"($t.$field)"
+        case As(te, ty, r) => s"($te : $ty)"
+        case NatType(r) => "Nat"
+        case Nat(value, r) => s"$value"
+        case Succ(t, r) => s"(S $t)"
+        case Debug(t, r) => s"(debug $t)"
+        case Match(t, onZero, onSucc, r) => s"($t match { $onZero, $onSucc })"
+    
 }

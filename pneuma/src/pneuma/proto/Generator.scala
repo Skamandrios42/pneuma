@@ -27,7 +27,7 @@ object Generator {
         case Term.Var(x, tagged, _) =>
             // puts local `x` on the stack
             mv.visitVarInsn(ALOAD, context(x))
-        case Term.Abs(t, _) =>
+        case Term.Abs(t, _, _) =>
             val anon = f"anon$$${anonCounter.next()}%04d"
             val sig =  s"(${"Ljava/lang/Object;" * (context.size + 1)})Ljava/lang/Object;"
             // generate `body` as static function
@@ -116,7 +116,7 @@ object Generator {
             mv.visitMethodInsn(INVOKEVIRTUAL, "java/io/PrintStream", "println", "(Ljava/lang/Object;)V", false)
             mv.visitVarInsn(ALOAD, context.size)
 
-        case Term.Match(t, onZero, onSucc, _) =>
+        case Term.Match(t, onZero, onSucc, _, _) =>
             val second = new Label
             val end = new Label
             generate(name, cw, mv, t, context, anonCounter, modCounter)

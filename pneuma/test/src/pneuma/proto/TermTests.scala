@@ -7,20 +7,22 @@ import general.Result
 
 class TermTests extends AnyFunSuite {
 
-    extension (self: Result[TypeError, (Term, Term)]) def untag = self.map((x, y) => (x.untag, y.untag))
+    extension (self: Result[TypeError, (Term, Term)]) def untag = self.map((x, y) => (x.untag.erase, y.untag.erase))
 
     test("miscellaneous") {
         val te = \(\(1 at 0))
         val ty = (* --> *) --> (* --> *)
-        assert((te typeCheck ty) == Result.Success(te, ty))
+        assert((te typeCheck ty).untag == Result.Success(te, ty))
     }
 
     test("implicits I") {
         val te = \(0 at ?)
         val ty = (* --> *) --> (* -?> *)
         val teRes = \(\(1 at 0))
-        assert((te typeCheck ty) == Result.Success(teRes, ty))
+        assert((te typeCheck ty).untag == Result.Success(teRes, ty))
     }
+    //Success((\ -> \ -> (1 0))), ((Type => Type) => (Type =?> Type)))) did not equal 
+    //Success((\ -> \ -> (1 0))), ((Type => Type) => (Type =?> Type))))
 
     test("implicits II") {
         val te = \(mod("x" := 1, "y" := ?))
@@ -44,7 +46,7 @@ class TermTests extends AnyFunSuite {
             main : Nat = (summon { x : Nat }).x
         }.main"""
         val typ = PneumaParser(program).flatMap(_.convert(Map.empty)).flatMap(_.typeCheck).map(_(1))
-        assert(typ.map(_.eraseRegion) == Result.Success(Nat))
+        assert(typ.map(_.erase) == Result.Success(Nat))
     }
 
     test("implicits V") {
@@ -54,7 +56,7 @@ class TermTests extends AnyFunSuite {
             main : Nat = summon (Nat => Nat) 42
         }.main"""
         val typ = PneumaParser(program).flatMap(_.convert(Map.empty)).flatMap(_.typeCheck).map(_(1))
-        assert(typ.map(_.eraseRegion) == Result.Success(Nat))
+        assert(typ.map(_.erase) == Result.Success(Nat))
     }
 
     test("modules") {
