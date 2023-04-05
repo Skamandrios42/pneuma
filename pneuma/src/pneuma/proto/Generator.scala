@@ -11,7 +11,7 @@ import org.objectweb.asm.Label
 import generation.Counter
 
 object Generator {
-    def apply(name: String, term: Term) =
+    def bytecode(name: String, term: Term) =
         defineClass(V17, ACC_PUBLIC, name) { cw =>
             cw.defineMethod(ACC_PUBLIC + ACC_STATIC, "main", "([Ljava/lang/String;)V") { mv =>
                 generate(name, cw, mv, term, Map.empty, Counter(), Counter())

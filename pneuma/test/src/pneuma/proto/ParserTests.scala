@@ -57,7 +57,7 @@ class ParserTests extends AnyFunSuite {
         println("---")
         checked.map(_.foreach((a, b) => a.eval))
         println("--- NOW GENERATING")
-        checked.foreach(_.foreach((a, _) => Generator("Generator", a)))
+        checked.foreach(_.foreach((a, _) => Generator.bytecode("example_programs/output/Generator", a)))
     }
 
     test("message") {

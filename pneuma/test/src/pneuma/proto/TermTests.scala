@@ -210,13 +210,25 @@ class TermTests extends AnyFunSuite {
         assert((te as ty).typeCheck.untag == Result.Success(teExp as tyExp, tyExp))
     }
 
+    test("this has to work") {
+        val te = \(\(0))
+        val ty = * --> (0 --> 1)
+        assert((te as ty).typeCheck.untag == Result.Success(te as ty, ty))
+    }
+
     test("shifting in module projection") {
+
+        println(PneumaParser("""( \A -> \a -> { x = a, y = this.x } ) : ((A : Type) => A => { x : A, y : A })""").flatMap(_.convert(Map.empty)).flatMap(_.typeCheck))
+        println(PneumaParser("""( \A -> \a -> { x = a } ) : ((A : Type) => A => { x : A })""").flatMap(_.convert(Map.empty)).flatMap(_.typeCheck))
+
+
+
         val te = \(\(mod(
             "x" := 1,
             "y" := (0 ! "x"),
         )))
         val ty = * --> (0 --> int(
-            "x" ::= (\(0) as (* --> *)) at 2,
+            "x" ::= 2,
             "y" ::= 2,
         ))
         assert((te as ty).typeCheck.untag == Result.Success(te as ty, ty))

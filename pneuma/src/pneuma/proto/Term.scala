@@ -170,10 +170,10 @@ enum Term extends HasRegion {
         case Debug(t, _) => Debug(t.shift(amount, cutoff), this.r)
         case Match(t, onZero, onSucc, _, x) => Match(t.shift(amount, cutoff), onZero.shift(amount, cutoff), onSucc.shift(amount, cutoff + 1), this.r, x)
 
-    /** returns [[shift(amount, 0)]] */
+    /** returns [[shift shift(amount, 0)]] */
     def >>(amount: Int) = shift(amount, 0)
 
-    /** returns [[shift(-amount, 0)]] */
+    /** returns [[shift shift(-amount, 0)]] */
     def <<(amount: Int) = shift(-amount, 0)
 
     /** replaces all occurrences of a variable by `t`
@@ -358,17 +358,17 @@ enum Term extends HasRegion {
             def updatedRelation = relation + ((this, that))
             (this.eval, that.eval) match
                 case (Var(x, _, _), Var(y, _, _)) => x == y
-                case (Abs(t, _, _), Abs(e, _, _)) => t.equivalence(e, updatedRelation >> 1)
+                case (Abs(t, _, _), Abs(e, _, _)) => t.equivalence(e, updatedRelation)
                 case (App(t1, t2, _), App(e1, e2, _)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
                 case (Typ(_), Typ(_)) => true
                 case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
-                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation >> 1)
-                case (Imp(t1, t2, _), Imp(e1, e2, _)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation >> 1)
+                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
+                case (Imp(t1, t2, _), Imp(e1, e2, _)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
                 case (Module(ts, _), Module(es, _)) => (ts zip es).forall {
-                    case (ModElem(s1, t1, m1), ModElem(s2, t2, m2)) => s1 == s2 && m1 == m2 && t1.equivalence(t2, updatedRelation >> 1)
+                    case (ModElem(s1, t1, m1), ModElem(s2, t2, m2)) => s1 == s2 && m1 == m2 && t1.equivalence(t2, updatedRelation)
                 }
                 case (Interface(ts, _), Interface(es, _)) => (ts zip es).forall {
-                    case (IntElem(s1, t1, m1), IntElem(s2, t2, m2)) => s1 == s2 && m1 == m2 && t1.equivalence(t2, updatedRelation >> 1)
+                    case (IntElem(s1, t1, m1), IntElem(s2, t2, m2)) => s1 == s2 && m1 == m2 && t1.equivalence(t2, updatedRelation)
                 }
                 case (As(t1, t2, _), As(e1, e2, _)) => t1.equivalence(e1, updatedRelation) && t2.equivalence(e2, updatedRelation)
                 case (Get(t, f1, _), Get(e, f2, _)) => f1 == f2 && t.equivalence(e, updatedRelation)
@@ -376,7 +376,7 @@ enum Term extends HasRegion {
                 case (Nat(v1, _), Nat(v2, _)) => v1 == v2
                 case (Succ(t1, _), Succ(t2, _)) => t1.equivalence(t2, updatedRelation)
                 case (Debug(t1, _), Debug(t2, _)) => t1.equivalence(t2, updatedRelation)
-                case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation >> 1)
+                case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation)
                 case _ => false
 
     /** checks, if this (seen as a type) conforms to the expected shape using [[===]]
@@ -436,7 +436,7 @@ enum Term extends HasRegion {
 
     def searchAll(ty: Term, i: I, c: C): Result[TypeError, (Term, Term)] = ty match
         case Imp(t1, t2, _) => search(t1, i, i) match
-            case Some(value) => 
+            case Some(value) =>
                 this.searchAll(t2, i, c).map { (thi, thy) => (App(thi, value, this.r), thy) }
             case None => Result.fail(TypeError.NoImplicitFound(Some(t1.revert(c)), this.r))
         case other => Result.succeed(this, ty)
@@ -475,6 +475,8 @@ enum Term extends HasRegion {
                 case Abs(t, r1, x1) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2, r2, x2)) =>    // Done SHOULD t1 be checked to be nonempty
                         val (y, ctx) = t.put(c, x1)
+                        println(s"LOOK: ${(g >> 1) + (0 -> (t1 >> 1))}")
+                        println(s"AND:  ${t2}")
                         (t.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, ctx, Some(t2))).map { (te, t3) =>
                             (Abs(te, r1, y), Pro(t1, t3, r2, x2))
                         }
@@ -539,7 +541,7 @@ enum Term extends HasRegion {
                             fields.find(_.name == field) match
                                 case Some(IntElem(name, typ, mode)) =>
                                     //println(s"$typ -- $shape [${g.mkString(", ")}]")
-                                    Get(te, field, r).checkWithSearch(typ.replace(0, te), shape, i, c) // should `te` be shifted?
+                                    Get(te, field, r).checkWithSearch(typ.replace(0, te >> 1) << 1, shape, i, c) // should `te` be shifted?
                                 case _ => Result.fail(TypeError.NoField(t.revert(c), field, this.r))
                         case (te, ty) =>
                             Result.fail(TypeError.NoField(t.revert(c), field, this.r))
@@ -565,7 +567,7 @@ enum Term extends HasRegion {
     def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, i: I, c: C): Result[TypeError, (Module, Interface)] = fields match
         case Nil => Result.Success(Module(module.reverse, this.r), Interface(interface.reverse, this.r))
         case (ModElem(name, term, mode), IntElem(name1, typ, mode1)) :: next if name == name1 && mode == mode1 => 
-            val expContext = (g >> 1) + (0 -> Interface(interface ++ fields.map(_(1)), this.r))
+            val expContext = (g >> 1) + (0 -> (Interface(interface ++ fields.map(_(1)), this.r) >> 1))
             val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.r), name, this.r)) }
             val taggedTerm = term.tag(0, Module(module, this.r) >> 1)
             val taggedType = typ.tag(0, Module(module, this.r) >> 1)
@@ -578,7 +580,7 @@ enum Term extends HasRegion {
     def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I, c: C): Result[TypeError, (Module, Interface)] = fields match
         case Nil => Result.Success(Module(module.reverse, this.r), Interface(interface.reverse, this.r))
         case ModElem(name, term, mode) :: next => 
-            val expContext = (g >> 1) + (0 -> Interface(interface, this.r))
+            val expContext = (g >> 1) + (0 -> (Interface(interface, this.r) >> 1))
             val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.r), name, this.r)) }
             val taggedTerm = term.tag(0, Module(module, this.r) >> 1)
             taggedTerm.transform(expContext, impContext, taggedTerm.put(c, "this")(1), None).flatMap { (te, ty) =>
@@ -589,7 +591,7 @@ enum Term extends HasRegion {
     def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, i: I, c: C): Result[TypeError, (Interface, Term.Typ)] = fields match
         case Nil => Result.Success(Interface(checked.reverse, this.r), Typ(this.r))
         case IntElem(name, typ, mode) :: next =>
-            val expContext = (g >> 1) + (0 -> Interface(fields ++ checked, this.r))
+            val expContext = (g >> 1) + (0 -> (Interface(fields ++ checked, this.r)))
             val impContext =  (i >> 1) ++ checked.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.r), name, this.r)) }
             typ.transform(expContext, impContext, typ.put(c, "this")(1), Some(Typ(this.r))).flatMap { (ty, _) => 
                 checkInterface(next, IntElem(name, ty, mode) :: checked, g, i, c)
