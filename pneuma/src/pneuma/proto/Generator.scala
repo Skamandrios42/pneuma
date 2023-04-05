@@ -140,6 +140,7 @@ object Generator {
 
             mv.visitLabel(end)
         case other =>
-            println(s"WARNING: $other got erased!")
-            mv.visitFieldInsn(GETSTATIC, "Type", "instance", "LType;")
+            // println(s"WARNING: $other got erased!")
+            mv.visitInsn(ACONST_NULL)
+            //mv.visitFieldInsn(GETSTATIC, "Type", "instance", "LType;")
 }

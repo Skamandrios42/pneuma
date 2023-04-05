@@ -19,6 +19,13 @@ object pneuma extends ScoverageModule {
 
 }
 
+def build = T {
+    pneuma.assembly()
+    println("[assembly done]")
+    os.proc("mv", "out/pneuma/assembly.dest/out.jar", "pneumac").call()
+    println("[moving done]")
+}
+
 object playground extends ScalaModule {
 
     def version = "0.0.0"

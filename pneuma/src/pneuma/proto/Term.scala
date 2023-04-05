@@ -475,8 +475,6 @@ enum Term extends HasRegion {
                 case Abs(t, r1, x1) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2, r2, x2)) =>    // Done SHOULD t1 be checked to be nonempty
                         val (y, ctx) = t.put(c, x1)
-                        println(s"LOOK: ${(g >> 1) + (0 -> (t1 >> 1))}")
-                        println(s"AND:  ${t2}")
                         (t.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, ctx, Some(t2))).map { (te, t3) =>
                             (Abs(te, r1, y), Pro(t1, t3, r2, x2))
                         }
