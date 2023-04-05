@@ -15,12 +15,11 @@ object Compiler {
     def defaultName = "default.pneuma"
 
     def main(args: Array[String]): Unit = 
-        require(args.length <= 1, "exactly one argument required!")
-        val fileName = Try(args(0)).getOrElse(defaultName)
-        require(fileName.endsWith(".pneuma"), "wrong file extension!")
-        require(Files.exists(Path.of(fileName)), s"file $fileName does not exist")
-
         try
+            require(args.length <= 1, "exactly one argument required.")
+            val fileName = Try(args(0)).getOrElse(defaultName)
+            require(fileName.endsWith(".pneuma"), s"wrong file extension of file $fileName.")
+            require(Files.exists(Path.of(fileName)), s"file $fileName does not exist.")
             val source = "{\n" ++ Files.readString(Path.of(fileName)) ++ "\n}.main"
             val result = for
                 program <- PneumaParser(source)
