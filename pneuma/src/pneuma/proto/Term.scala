@@ -65,7 +65,7 @@ enum Term extends HasRegion {
         case Match(t, onZero, onSucc, r, x) => Match(t, onZero, onSucc, that.r, x)
 
     def erase: Term = this match
-        case Var(x, tagged, _) => Var(x, tagged, Region(None, 0, 0))
+        case Var(x, tagged, _) => Var(x, tagged.map(_.erase), Region(None, 0, 0))
         case Abs(t, _, _) => Abs(t.erase, Region(None, 0, 0), "")
         case App(t1, t2, _) => App(t1.erase, t2.erase, Region(None, 0, 0))
         case Typ(_) => Typ(Region(None, 0, 0))
@@ -85,8 +85,9 @@ enum Term extends HasRegion {
 
     /** generates a simple string representation of the program */
     override def toString: String = this match
-        case Var(x, _, _) => s"$x"
-        case Abs(t, _, x) => s"\\[$x] -> $t)"
+        case Var(x, Some(tag), _) => s"$x[$tag]"
+        case Var(x, None, _) => s"$x"
+        case Abs(t, _, x) => s"(\\[$x] -> $t)"
         case App(t1, t2, _) => s"($t1 $t2)"
         case Typ(_) => "Type"
         case Phi(_) => "?"
@@ -100,7 +101,7 @@ enum Term extends HasRegion {
         case Nat(value, _) => s"nat($value)"
         case Succ(t, _) => s"(S $t)"
         case Debug(t, _) => s"(debug $t)"
-        case Match(t, onZero, onSucc, _, x) => s"($t match { $onZero, \\[$x] -> $onSucc }"
+        case Match(t, onZero, onSucc, _, x) => s"($t match { $onZero, \\[$x] -> $onSucc })"
 
     extension [A](self: List[ModElem]) {
         /** maps f over every occurrence of [[Term]]
@@ -158,7 +159,7 @@ enum Term extends HasRegion {
         case Typ(_) => Typ(this.r)
         case Phi(_) => Phi(this.r)
         case Pro(t1, t2, _, x) => Pro(t1.shift(amount, cutoff), t2.shift(amount, cutoff + 1), this.r, x)
-        case Imp(t1, t2, _) => Imp(t1.shift(amount, cutoff), t2.shift(amount, cutoff), this.r)
+        case Imp(t1, t2, _) => Imp(t1.shift(amount, cutoff), t2.shift(amount, cutoff + 1), this.r)
         case Module(fields, _) => Module(fields.mapValues(_.shift(amount, cutoff + 1)), this.r)
         case Interface(fields, _) => Interface(fields.mapValues(_.shift(amount, cutoff + 1)), this.r)
         case Get(t, field, _) => Get(t.shift(amount, cutoff), field, this.r)
@@ -241,7 +242,6 @@ enum Term extends HasRegion {
         case Succ(e, _) => Succ(e.untag, this.r)
         case Debug(e, _) => Debug(e.untag, this.r)
         case Match(t, onZero, onSucc, _, x) => Match(t.untag, onZero.untag, onSucc.untag, this.r, x)
-        
 
     /** evaluates `this` using the _call-by-value_ strategy */
     def eval: Term = this match
@@ -256,17 +256,18 @@ enum Term extends HasRegion {
             case e => Term.Get(e, field, this.r)
         case Term.As(te, ty, _) => te
         case Var(x, Some(t), _) => t
-        case Succ(e, _) => e.eval match
+        case Succ(e, r) => e.eval match
             case Nat(value, _) => Nat(value + 1, this.r)
-            case e => e
-        case Debug(e, _) => e.eval match
+            case u => Succ(u, r)
+        case Debug(e, r) => e.eval match
             case Nat(value, _) =>
                 println(s"debug $value") 
                 Nat(value, this.r)
-            case e => e
+            case u => Debug(u, r)
         case Match(e, onZero, onSucc, _, x) => e.eval match
             case Nat(0, _) => onZero.eval
             case Nat(other, _) => App(Abs(onSucc, onSucc.r, x), Nat(other - 1, e.r), onSucc.r).eval
+            case Succ(e, r) => App(Abs(onSucc, onSucc.r, x), e, onSucc.r).eval
             case other => Match(other, onZero, onSucc, this.r, x)
         case _ => this
 
@@ -346,7 +347,13 @@ enum Term extends HasRegion {
       * @return whether this and that behave the same under evaluation
       */
     def equivalence(that: Term, relation: R): Boolean = 
-        if relation(this, that) then true else
+        // if relation.size == 100 then System.exit(0)
+        // println("  ---  ")
+        // println(s"(${Console.RED}$this,$that${Console.RESET})")
+        // relation.foreach(println)
+        // println(s"(${Console.GREEN}${this.eval},${that.eval}${Console.RESET})")
+        // Thread.sleep(300)
+        if relation(this, that) || this == that then true else
             // relation with assumed equivalence of this and right
             def updatedRelation = relation + ((this, that))
             (this.eval, that.eval) match
@@ -369,7 +376,7 @@ enum Term extends HasRegion {
                 case (Nat(v1, _), Nat(v2, _)) => v1 == v2
                 case (Succ(t1, _), Succ(t2, _)) => t1.equivalence(t2, updatedRelation)
                 case (Debug(t1, _), Debug(t2, _)) => t1.equivalence(t2, updatedRelation)
-                case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation)
+                case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation >> 1)
                 case _ => false
 
     /** checks, if this (seen as a type) conforms to the expected shape using [[===]]
@@ -441,27 +448,21 @@ enum Term extends HasRegion {
       * @return either term and type with resolved implicits or an error message
       */
     def transform(g: G, i: I, c: C, shape: Option[Term]): Result[TypeError, (Term, Term)] =
-        // shape match
-        //     case None => println(s"[DEBUG] $this")
-        //     case Some(value) => println(s"[DEBUG] $this : $value")
-        // typecheck and transform the shape
-        if this.isInstanceOf[Typ] && shape.exists(_.isInstanceOf[Typ]) then Result.Success(Typ(this.r), Typ(this.r))
-        else shape.map(_.transform(g, i, c, Some(Typ(this.r))).map(_(0).eval)) match
+        // typecheck and transform the shape MOVED TO CALL SITE
+        // if this.isInstanceOf[Typ] && shape.exists(_.isInstanceOf[Typ]) then Result.Success(Typ(this.r), Typ(this.r))
+        // else shape.map(_.transform(g, i, c, Some(Typ(this.r)))
+        shape.map(_.eval) match
             // add implicit in context // SHOULD t1 be checked to be nonempty ?
-            case Some(Result.Success(Imp(t1, t2, r))) =>
+            case Some(Imp(t1, t2, r)) =>
                 t1.transform(g, i, c, Some(Typ(this.r))).flatMap((t1te, _) =>
                     val (y, ctx) = put(c, "imp$")
                     (this >> 1).transform(g >> 1, (i >> 1) + ((t1te >> 1) -> Var(0, None, this.r)), ctx, Some(t2)).map { (te, ty) => 
                         (Abs(te, te.r, y), Imp(t1te, ty, r))
                     }
                 )
-            case Some(Result.Failure(value)) => Result.Failure(value)
+            // case Some(Result.Failure(value)) => Result.Failure(value)
             // otherwise match on this and apply typechecking rules
-            case e          => 
-                val shape = e.collect {
-                    case Result.Success(x) => x
-                }
-                this match
+            case shape          => this match
                 // checks if Typ matches shape
                 case Typ(r) => Typ(r).checkWithSearch(Typ(r), shape, i, c)
                 // get type from context
@@ -516,9 +517,12 @@ enum Term extends HasRegion {
                 // case As(te, ty) => te.transform(g, i, Some(ty)).flatMap { (ue, uy) =>
                 //     ue.checkWithSearch(uy, shape.orElse(Some(ty)), i)
                 // }
-                case As(te, ty, r) => te.transform(g, i, c, Some(ty)).flatMap { (ue, uy) =>
-                    As(ue, ty, r).checkWithSearch(uy, shape.orElse(Some(ty)), i, c)
-                }
+                case As(te, ty, r) => 
+                    ty.transform(g, i, c, Some(Typ(r))).flatMap { (ty, _) =>
+                            te.transform(g, i, c, Some(ty)).flatMap { (ue, uy) =>
+                            As(ue, ty, r).checkWithSearch(uy, shape.orElse(Some(ty)), i, c)
+                        }
+                    }
 
                 case Module(fields, _) => shape match
                     case None => checkModule(fields, Nil, Nil, g, i, c)
@@ -530,7 +534,7 @@ enum Term extends HasRegion {
                 }
 
                 case Get(t, field, r) => t.transform(g, i, c, None).flatMap { (te, ty) =>
-                    te.searchAll(ty, i, c).flatMap {
+                    te.searchAll(ty.eval, i, c).flatMap {
                         case (te, Interface(fields, _)) => 
                             fields.find(_.name == field) match
                                 case Some(IntElem(name, typ, mode)) =>
