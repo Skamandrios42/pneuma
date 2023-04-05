@@ -95,7 +95,8 @@ object Generator {
             generate(name, cw, mv, te, context, anonCounter, modCounter)
 
         case Term.Nat(value, _) =>
-            mv.visitIntInsn(BIPUSH, value)
+            mv.visitLdcInsn(value)
+            // mv.visitIntInsn(BIPUSH, value)
             mv.visitMethodInsn(INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
 
         case Term.Succ(t, _) =>
