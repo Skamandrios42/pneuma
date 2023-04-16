@@ -1,0 +1,17 @@
+Debugger : Type => Type = \A -> {
+    put : A => Nat
+},
+
+?debugger_nat : Debugger Nat = {
+    put = \n -> debug n
+},
+
+?debugger_rec : Debugger { x: Nat } = {
+    put = \r -> debug r.x
+},
+
+use : (A : Type) => Debugger A =?> A => Nat = \A -> \a -> (? : (Debugger A)).put a,
+
+and : Nat => Nat => Nat = \x -> \y -> y,
+
+main : Nat = and (use Nat 42) (use { x : Nat } { x = 666 })

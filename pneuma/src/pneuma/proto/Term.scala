@@ -290,6 +290,8 @@ enum Term extends HasRegion {
         /** shifts all elements in the collection by amount */
         @targetName("shiftI")
         def >>(amount: Int): I = self.map { case (key, value) => (key >> amount, value >> amount) }
+        @targetName("tagI")
+        def tag(y: Int, t: Term): I = self.map { case (key, value) => (key.tag(y, t), value.tag(y, t)) }
     }
 
     extension (self: R) {
@@ -566,7 +568,7 @@ enum Term extends HasRegion {
         case Nil => Result.Success(Module(module.reverse, this.r), Interface(interface.reverse, this.r))
         case (ModElem(name, term, mode), IntElem(name1, typ, mode1)) :: next if name == name1 && mode == mode1 => 
             val expContext = (g >> 1) + (0 -> (Interface(interface ++ fields.map(_(1)), this.r) >> 1))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.r), name, this.r)) }
+            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.r), name, this.r)) }.toMap.tag(0, Module(module, this.r) >> 1)
             val taggedTerm = term.tag(0, Module(module, this.r) >> 1)
             val taggedType = typ.tag(0, Module(module, this.r) >> 1)
             taggedTerm.transform(expContext, impContext, taggedTerm.put(c, "this")(1), Some(taggedType)).flatMap { (te, ty) =>
@@ -579,7 +581,7 @@ enum Term extends HasRegion {
         case Nil => Result.Success(Module(module.reverse, this.r), Interface(interface.reverse, this.r))
         case ModElem(name, term, mode) :: next => 
             val expContext = (g >> 1) + (0 -> (Interface(interface, this.r) >> 1))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.r), name, this.r)) }
+            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.r), name, this.r)) }.toMap.tag(0, Module(module, this.r) >> 1)
             val taggedTerm = term.tag(0, Module(module, this.r) >> 1)
             taggedTerm.transform(expContext, impContext, taggedTerm.put(c, "this")(1), None).flatMap { (te, ty) =>
                 checkModule(next, ModElem(name, te, mode) :: module, IntElem(name, ty, mode) :: interface, g, i, c)
