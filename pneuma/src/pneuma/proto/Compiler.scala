@@ -20,7 +20,7 @@ object Compiler {
             val fileName = Try(args(0)).getOrElse(defaultName)
             require(fileName.endsWith(".pneuma"), s"wrong file extension of file $fileName.")
             require(Files.exists(Path.of(fileName)), s"file $fileName does not exist.")
-            val source = "{\n" ++ Files.readString(Path.of(fileName)) ++ "\n}.main"
+            val source = PneumaParser.removeComments("{\n" ++ Files.readString(Path.of(fileName)) ++ "\n}.main")
             val result = for
                 program <- PneumaParser(source)
                 term    <- program.convert(Map.empty)

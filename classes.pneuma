@@ -1,17 +1,21 @@
-Debugger : Type => Type = \A -> {
-    put : A => Nat
-},
+Debugger : Type => Type = \A -> { put : A => Nat },
 
-?debugger_nat : Debugger Nat = {
-    put = \n -> debug n
-},
+?debugger_nat : Debugger Nat = { put = \n -> debug n },
 
-?debugger_rec : Debugger { x: Nat } = {
-    put = \r -> debug r.x
-},
+?debugger_rec : Debugger { x: Nat } = { put = \r -> debug r.x },
+
+?debugger_rec1 : Debugger { y: Nat } = { put = \r -> debug r.y },
+
+?debugger_fun : Debugger { x : Nat } =?> Debugger (Nat => { x : Nat }) = 
+    { put = \f -> (? : Debugger { x : Nat }).put (f 0) },
 
 use : (A : Type) => Debugger A =?> A => Nat = \A -> \a -> (? : (Debugger A)).put a,
 
 and : Nat => Nat => Nat = \x -> \y -> y,
 
-main : Nat = and (use Nat 42) (use { x : Nat } { x = 666 })
+F : Type = Nat => { x : Nat },
+
+f : F = \n -> { x = S (S n) },
+
+# Das ist ein Kommentar
+main : Nat = and (use Nat 42) (use (Nat => { x : Nat }) f)

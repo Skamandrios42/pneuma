@@ -381,6 +381,67 @@ enum Term extends HasRegion {
                 case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation)
                 case _ => false
 
+    extension (self: Option[List[(Int, Term)]]) {
+        def &&(that: Option[List[(Int, Term)]]) = for
+            a <- self
+            b <- that
+        yield a ::: b
+        def >>(amount: Int): Option[List[(Int, Term)]] = self.map(_ >> amount)
+        def <<(amount: Int): Option[List[(Int, Term)]] = self.map(_ << amount)
+    }
+
+    extension (self: List[Int]) {
+        @targetName("shiftListInt")
+        def >>(amount: Int) = self.map(_ + amount)
+    }
+
+    extension (self: List[(Int, Term)]) {
+        @targetName("shiftListIntTerm")
+        def >>(amount: Int): List[(Int, Term)] = self.map((i, t) => (i + amount, t >> amount))
+        @targetName("shiftListIntTermDown")
+        def <<(amount: Int): List[(Int, Term)] = self.map((i, t) => (i - amount, t << amount))
+    }
+
+    def genEq(that: Term, relation: R, variables: List[Int]): Option[List[(Int, Term)]] =
+        if relation(this, that) || this == that then Some(Nil) else
+            // relation with assumed equivalence of this and right
+            def updatedRelation = relation + ((this, that))
+            (this.eval, that.eval) match
+                case (Var(x, _, _), Var(y, _, _)) => Option.when(x == y)(Nil)
+                case (Var(x, _, _), term) => Option.when(variables contains x)((x, term) :: Nil)
+                case (Abs(t, _, _), Abs(e, _, _)) => t.genEq(e, updatedRelation, variables >> 1) << 1
+                case (App(t1, t2, _), App(e1, e2, _)) => t1.genEq(e1, updatedRelation, variables) && t2.genEq(e2, updatedRelation, variables)
+                case (Typ(_), Typ(_)) => Some(Nil)
+                case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
+                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) => t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Imp(t1, t2, _), Imp(e1, e2, _)) => t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Module(ts, _), Module(es, _)) => 
+                    (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
+                        case (opt, (ModElem(s1, t1, m1), ModElem(s2, t2, m2))) => 
+                            opt.flatMap { xs => 
+                                (t1.genEq(t2, updatedRelation, variables >> 1) << 1).flatMap { ys =>
+                                    Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
+                                }
+                            }
+                    }
+                case (Interface(ts, _), Interface(es, _)) => 
+                    (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
+                    case (opt, (IntElem(s1, t1, m1), IntElem(s2, t2, m2))) => 
+                            opt.flatMap { xs => 
+                                (t1.genEq(t2, updatedRelation, variables >> 1) << 1).flatMap { ys =>
+                                    Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
+                                }
+                            }
+                    }
+                case (As(t1, t2, _), As(e1, e2, _)) => t1.genEq(e1, updatedRelation, variables) && t2.genEq(e2, updatedRelation, variables)
+                case (Get(t, f1, _), Get(e, f2, _)) => t.genEq(e, updatedRelation, variables).filter(_ => f1 == f2)
+                case (NatType(_), NatType(_)) => Some(Nil)
+                case (Nat(v1, _), Nat(v2, _)) => Option.when(v1 == v2)(Nil)
+                case (Succ(t1, _), Succ(t2, _)) => t1.genEq(t2, updatedRelation, variables)
+                case (Debug(t1, _), Debug(t2, _)) => t1.genEq(t2, updatedRelation, variables)
+                case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.genEq(t2, updatedRelation, variables) && z1.genEq(z2, updatedRelation, variables) && (s1.genEq(s2, updatedRelation, variables >> 1) << 1)
+                case _ => None
+    
     /** checks, if this (seen as a type) conforms to the expected shape using [[===]]
       * @param shape optional type
       * @return `this === shape.get`, if shape is defined or else true

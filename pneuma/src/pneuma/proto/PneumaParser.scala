@@ -140,6 +140,10 @@ object PneumaParser {
         case (a, Some(_, b)) => Program.Imp(a, b) // cant happen, will be obsolete with better typing
     }.track
 
+    def removeComments(input: String): String = 
+        if input == "" then "" else
+            input.takeWhile(_ != '#') ++ removeComments(input.dropWhile(_ != '#').dropWhile(_ != '\n'))
+
     def apply(input: String): Result[ParseError, Program] = imp.spaced(Source(input, 0))(0)
     def fromFile(name: String) = apply("{" ++ Files.readString(Path.of(name)) ++ "}.main")
 }
