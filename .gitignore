@@ -17,8 +17,6 @@ generated
 out.jar
 TODO.md
 example_programs
-default.pneuma
-default copy.pneuma
-default.class
-Type.class
 pneumac
+code*.pneuma
+code*.class

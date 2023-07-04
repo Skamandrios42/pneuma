@@ -20,7 +20,7 @@ object Generator {
         }
 
     extension (self: Map[Int, Int]) def >>(amount: Int) = self.map {
-        case (a, b) => (a + 1, b)
+        case (a, b) => (a + amount, b)
     }
 
     def generate(name: String, cw: ClassWriter, mv: MethodVisitor, term: Term, context: Map[Int, Int], anonCounter: Counter, modCounter: Counter): Unit = term match
@@ -48,7 +48,7 @@ object Generator {
             generate(name, cw, mv, t1, context, anonCounter, modCounter) // put `abs` on the stack
             generate(name, cw, mv, t2, context, anonCounter, modCounter) // put `arg` on the stack
             mv.visitMethodInsn(INVOKEINTERFACE, "java/util/function/Function", "apply", "(Ljava/lang/Object;)Ljava/lang/Object;", true)
-        
+
         case Term.Module(fields, _) =>
             // println(fields)
             mv.visitTypeInsn(NEW, "java/util/HashMap")
@@ -56,7 +56,6 @@ object Generator {
             mv.visitMethodInsn(INVOKESPECIAL, "java/util/HashMap", "<init>", "()V", false)
             val index = modCounter.next()
             for Term.ModElem(ident, term, _) <- fields do
-                // println(s"for $ident : $context")
                 mv.visitInsn(DUP)
                 mv.visitLdcInsn(ident)
                 val anon = f"mod$$$ident$$${index}%04d"
@@ -74,8 +73,7 @@ object Generator {
                     s"(${"Ljava/lang/Object;" * context.size})Ljava/util/function/Function;",
                     Handle(H_INVOKESTATIC, name, anon, sig, false)
                 )
-
-                //generate(name, cw, mv, term, (context >> 1) + (0 -> context.size), namer)
+                // put the lambda into the HashMap
                 mv.visitMethodInsn(INVOKEVIRTUAL, "java/util/HashMap", "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", false)
                 mv.visitInsn(POP)
 
@@ -85,9 +83,12 @@ object Generator {
             mv.visitTypeInsn(CHECKCAST, "java/util/HashMap");
             // dupliziere es
             mv.visitInsn(DUP)
+            // store the module
             mv.visitVarInsn(ASTORE, context.size)
+            // greife auf Feld zu
             mv.visitLdcInsn(field)
             mv.visitMethodInsn(INVOKEVIRTUAL, "java/util/HashMap", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", false)
+            // wende das Feld auf Modul an (wg. lazy eval)
             mv.visitVarInsn(ALOAD, context.size)
             mv.visitMethodInsn(INVOKEINTERFACE, "java/util/function/Function", "apply", "(Ljava/lang/Object;)Ljava/lang/Object;", true)
 

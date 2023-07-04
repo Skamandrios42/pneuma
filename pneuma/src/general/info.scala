@@ -3,6 +3,9 @@ package general
 import java.nio.file.Path
 import java.io.File
 
+object Region {
+    def none = Region(None, 0, 0)
+}
 case class Region(file: Option[String], start: Int, end: Int) {
 
     def extract(content: String) =
