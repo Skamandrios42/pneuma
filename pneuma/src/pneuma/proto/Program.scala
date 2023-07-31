@@ -27,6 +27,7 @@ enum Program extends HasRegion {
     case Phi(r: Region = Region(None, 0, 0))
     case Pro(x: Option[String], t1: Program, t2: Program, r: Region = Region(None, 0, 0))
     case Imp(t1: Program, t2: Program, r: Region = Region(None, 0, 0))
+    case Inf(x: String, t1: Program, t2: Program, r: Region = Region(None, 0, 0))
     case Module(fields: List[ModElem], r: Region = Region(None, 0, 0))
     case Interface(fields: List[IntElem], r: Region = Region(None, 0, 0))
     case Get(t: Program, field: String, r: Region = Region(None, 0, 0))
@@ -49,6 +50,7 @@ enum Program extends HasRegion {
         case Program.Pro(Some(x), t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(b => Term.Pro(a, b, r, x)))
         case Program.Pro(None, t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx >> 1).map(b => Term.Pro(a, b, r, "")))
         case Program.Imp(t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx >> 1).map(b => Term.Imp(a, b, r)))
+        case Program.Inf(x, t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(b => Term.Inf(a, b, r, x)))
         case Program.Module(fields, r) => fields.map {
             case ModElem(name, term, Mode.Exp) => 
                 val names = fields.map(mod => mod.name -> Term.Get(Term.Var(0, None, r), mod.name, r)).toMap
@@ -83,6 +85,7 @@ enum Program extends HasRegion {
         case Pro(Some(x), t1, t2, r) => s"(($x : $t1) => $t2)"
         case Pro(None, t1, t2, r) => s"($t1 => $t2)"
         case Imp(t1, t2, r) => s"($t1 =?> $t2)"
+        case Inf(x, t1, t2, r) => s"([$x : $t1] => $t2)"
         case Module(fields, r) => s"{ ${fields.mkString(", ")} }"
         case Interface(fields, r) => s"{ ${fields.mkString(", ")} }"
         case Get(t, field, r) => s"($t.$field)"

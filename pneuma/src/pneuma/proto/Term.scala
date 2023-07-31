@@ -36,6 +36,7 @@ enum Term extends HasRegion {
     case Phi(r: Region)
     case Pro(t1: Term, t2: Term, r: Region, x: String)
     case Imp(t1: Term, t2: Term, r: Region)
+    case Inf(t1: Term, t2: Term, r: Region, x: String)
     case Module(fields: List[ModElem], r: Region)
     case Interface(fields: List[IntElem], r: Region)
     case Get(t: Term, field: String, r: Region)
@@ -54,6 +55,7 @@ enum Term extends HasRegion {
         case Phi(r) => Phi(that.r)
         case Pro(t1, t2, r, x) => Pro(t1, t2, that.r, x)
         case Imp(t1, t2, r) => Imp(t1, t2, that.r)
+        case Inf(t1, t2, r, x) => Inf(t1, t2, that.r, x)
         case Module(fields, r) => Module(fields, that.r)
         case Interface(fields, r) => Interface(fields, that.r)
         case Get(t, field, r) => Get(t, field, that.r)
@@ -71,6 +73,7 @@ enum Term extends HasRegion {
         case Typ(_) => Typ(Region(None, 0, 0))
         case Phi(_) => Phi(Region(None, 0, 0))
         case Pro(t1, t2, _, _) => Pro(t1.erase, t2.erase, Region(None, 0, 0), "")
+        case Inf(t1, t2, _, _) => Pro(t1.erase, t2.erase, Region(None, 0, 0), "")
         case Imp(t1, t2, _) => Imp(t1.erase, t2.erase, Region(None, 0, 0))
         case Module(fields, _) => Module(fields.map(_.onTerm(_.erase)), Region(None, 0, 0))
         case Interface(fields, _) => Interface(fields.map(_.onTerm(_.erase)), Region(None, 0, 0))
@@ -82,16 +85,20 @@ enum Term extends HasRegion {
         case Debug(t, _) => Debug(t.erase, Region(None, 0, 0))
         case Match(t, onZero, onSucc, _, _) => Match(t.erase, onZero.erase, onSucc.erase, Region(None, 0, 0), "")
     
+    
+
+
 
     /** generates a simple string representation of the program */
     override def toString: String = this match
-        case Var(x, Some(tag), _) => s"$x[$tag]"
+        case Var(x, Some(tag), _) => s"$x"
         case Var(x, None, _) => s"$x"
-        case Abs(t, _, x) => s"(\\[$x] -> $t)"
+        case Abs(t, _, x) => s"(\\|$x| -> $t)"
         case App(t1, t2, _) => s"($t1 $t2)"
         case Typ(_) => "Type"
         case Phi(_) => "?"
-        case Pro(t1, t2, _, x) => s"($t1[$x] => $t2)"
+        case Pro(t1, t2, _, x) => s"($t1 |$x| => $t2)"
+        case Inf(t1, t2, _, x) => s"([$t1 |$x|] => $t2)"
         case Imp(t1, t2, _) => s"($t1 =?> $t2)"
         case Module(fields, _) => s"{ ${fields.mkString(", ")} }"
         case Interface(fields, _) => s"{ ${fields.mkString(", ")} }"
@@ -126,25 +133,28 @@ enum Term extends HasRegion {
     }
 
     def put(ctx: C, s: String): (String, C) = 
-        if ctx.values.forall(_ != s) then (s, (ctx >> 1) + (0 -> s)) else put(ctx, s"$s'")
+        if s != "" then
+            if ctx.values.forall(_ != s) then (s, (ctx >> 1) + (0 -> s)) else put(ctx, s"$s'")
+        else ("", ctx)
 
-    def isFree(i: Int): Boolean = this match
-        case Var(x, tagged, r) => x != i
-        case Abs(t, r, x) => t.isFree(i + 1)
-        case App(t1, t2, r) => t1.isFree(i) && t2.isFree(i)
-        case Typ(r) => true
-        case Phi(r) => true
-        case Pro(t1, t2, r, x) => t1.isFree(i) && t2.isFree(i + 1)
-        case Imp(t1, t2, r) => t1.isFree(i) && t2.isFree(i + 1)
-        case Module(fields, r) => fields.forall(_.term.isFree(i + 1))
-        case Interface(fields, r) => fields.forall(_.term.isFree(i + 1))
-        case Get(t, field, r) => t.isFree(i)
-        case As(te, ty, r) => te.isFree(i) && ty.isFree(i)
-        case NatType(r) => true
-        case Nat(value, r) => true
-        case Succ(t, r) => t.isFree(i)
-        case Debug(t, r) => t.isFree(i)
-        case Match(t, onZero, onSucc, r, x) => t.isFree(i) && onZero.isFree(i) && onSucc.isFree(i + 1)
+    // def isFree(i: Int): Boolean = this match
+    //     case Var(x, tagged, r) => x != i
+    //     case Abs(t, r, x) => t.isFree(i + 1)
+    //     case App(t1, t2, r) => t1.isFree(i) && t2.isFree(i)
+    //     case Typ(r) => true
+    //     case Phi(r) => true
+    //     case Pro(t1, t2, r, x) => t1.isFree(i) && t2.isFree(i + 1)
+    //     case Inf(t1, t2, r, x) => t1.isFree(i) && t2.isFree(i + 1)
+    //     case Imp(t1, t2, r) => t1.isFree(i) && t2.isFree(i + 1)
+    //     case Module(fields, r) => fields.forall(_.term.isFree(i + 1))
+    //     case Interface(fields, r) => fields.forall(_.term.isFree(i + 1))
+    //     case Get(t, field, r) => t.isFree(i)
+    //     case As(te, ty, r) => te.isFree(i) && ty.isFree(i)
+    //     case NatType(r) => true
+    //     case Nat(value, r) => true
+    //     case Succ(t, r) => t.isFree(i)
+    //     case Debug(t, r) => t.isFree(i)
+    //     case Match(t, onZero, onSucc, r, x) => t.isFree(i) && onZero.isFree(i) && onSucc.isFree(i + 1)
 
     /** adds `amount` to all variables with distance of `cutoff` or longer
       * @param amount number to be added
@@ -159,6 +169,7 @@ enum Term extends HasRegion {
         case Typ(_) => Typ(this.r)
         case Phi(_) => Phi(this.r)
         case Pro(t1, t2, _, x) => Pro(t1.shift(amount, cutoff), t2.shift(amount, cutoff + 1), this.r, x)
+        case Inf(t1, t2, _, x) => Inf(t1.shift(amount, cutoff), t2.shift(amount, cutoff + 1), this.r, x)
         case Imp(t1, t2, _) => Imp(t1.shift(amount, cutoff), t2.shift(amount, cutoff + 1), this.r)
         case Module(fields, _) => Module(fields.mapValues(_.shift(amount, cutoff + 1)), this.r)
         case Interface(fields, _) => Interface(fields.mapValues(_.shift(amount, cutoff + 1)), this.r)
@@ -189,6 +200,7 @@ enum Term extends HasRegion {
         case Typ(_) => Typ(this.r)
         case Phi(_) => Phi(this.r)
         case Pro(t1, t2, _, x) => Pro(t1.replace(y, t), t2.replace(y + 1, t >> 1), this.r, x)
+        case Inf(t1, t2, _, x) => Inf(t1.replace(y, t), t2.replace(y + 1, t >> 1), this.r, x)
         case Imp(t1, t2, _) => Imp(t1.replace(y, t), t2.replace(y + 1, t >> 1), this.r)
         case Module(fields, _) => Module(fields.mapValues(_.replace(y + 1, t >> 1)), this.r)
         case Interface(fields, _) => Interface(fields.mapValues(_.replace(y + 1, t >> 1)), this.r)
@@ -213,6 +225,7 @@ enum Term extends HasRegion {
         case Typ(_) => Typ(this.r)
         case Phi(_) => Phi(this.r)
         case Pro(t1, t2, _, x) => Pro(t1.tag(y, t), t2.tag(y + 1, t >> 1), this.r, x)
+        case Inf(t1, t2, _, x) => Inf(t1.tag(y, t), t2.tag(y + 1, t >> 1), this.r, x)
         case Imp(t1, t2, _) => Imp(t1.tag(y, t), t2.tag(y + 1, t >> 1), this.r)
         case Module(fields, _) => Module(fields.mapValues(_.tag(y + 1, t >> 1)), this.r)
         case Interface(fields, _) => Interface(fields.mapValues(_.tag(y + 1, t >> 1)), this.r)
@@ -232,6 +245,7 @@ enum Term extends HasRegion {
         case Typ(_) => Typ(this.r)
         case Phi(_) => Phi(this.r)
         case Pro(t1, t2, _, x) => Pro(t1.untag, t2.untag, this.r, x)
+        case Inf(t1, t2, _, x) => Pro(t1.untag, t2.untag, this.r, x)
         case Imp(t1, t2, _) => Imp(t1.untag, t2.untag, this.r)
         case Module(fields, _) => Module(fields.mapValues(_.untag), this.r)
         case Interface(fields, _) => Interface(fields.mapValues(_.untag), this.r)
@@ -273,7 +287,7 @@ enum Term extends HasRegion {
 
     /** maps indices to types */
     type G = Map[Int, Term]
-    /** maps types to variabls or module accesses */
+    /** maps types to variables or module accesses */
     type I = Map[Term, Term]
     /** relation between terms */
     type R = Set[(Term, Term)]
@@ -317,6 +331,9 @@ enum Term extends HasRegion {
         case Term.Pro(t1, t2, r, x) => 
             val (y, c) = t2.put(ctx, x)
             Program.Pro(Some(y), t1.revert(ctx), t2.revert(c), r)
+        case Term.Inf(t1, t2, r, x) => 
+            val (y, c) = t2.put(ctx, x)
+            Program.Inf(y, t1.revert(ctx), t2.revert(c), r)
         case Term.Imp(t1, t2, r) => Program.Imp(t1.revert(ctx), t2.revert(ctx >> 1), r)
         case Term.Module(fields, r) => 
             Program.Module(fields.map {
@@ -403,19 +420,30 @@ enum Term extends HasRegion {
     }
 
     def genEq(that: Term, relation: R, variables: List[Int]): Option[List[(Int, Term)]] =
-        if relation(this, that) || this == that then Some(Nil) else
+        println(s"genEq [$this] === [$that]  ---- ${this.getClass} / ${that.getClass}")
+
+        if relation(this, that) then Some(Nil) else
             // relation with assumed equivalence of this and right
             def updatedRelation = relation + ((this, that))
             (this.eval, that.eval) match
-                case (Var(x, _, _), Var(y, _, _)) => Option.when(x == y)(Nil)
-                case (Var(x, _, _), term) => Option.when(variables contains x)((x, term) :: Nil)
-                case (Abs(t, _, _), Abs(e, _, _)) => t.genEq(e, updatedRelation, variables >> 1) << 1
-                case (App(t1, t2, _), App(e1, e2, _)) => t1.genEq(e1, updatedRelation, variables) && t2.genEq(e2, updatedRelation, variables)
+                case (Var(x, _, _), term) =>
+                    val res = if variables contains x then Some((x, term) :: Nil)
+                              else if term.isInstanceOf[Var] && term.asInstanceOf[Var].x == x then Some(Nil)
+                              else None
+                    println(res)
+                    res
+                    // Option.when(variables contains x)((x, term) :: Nil)
+                case (Abs(t, _, _), Abs(e, _, _)) =>
+                    t.genEq(e, updatedRelation, variables >> 1) << 1
+                case (App(t1, t2, _), App(e1, e2, _)) =>
+                    t1.genEq(e1, updatedRelation, variables) && t2.genEq(e2, updatedRelation, variables)
                 case (Typ(_), Typ(_)) => Some(Nil)
                 case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
-                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) => t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
-                case (Imp(t1, t2, _), Imp(e1, e2, _)) => t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
-                case (Module(ts, _), Module(es, _)) => 
+                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) =>
+                    t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Imp(t1, t2, _), Imp(e1, e2, _)) =>
+                    t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Module(ts, _), Module(es, _)) =>
                     (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
                         case (opt, (ModElem(s1, t1, m1), ModElem(s2, t2, m2))) => 
                             opt.flatMap { xs => 
@@ -424,7 +452,7 @@ enum Term extends HasRegion {
                                 }
                             }
                     }
-                case (Interface(ts, _), Interface(es, _)) => 
+                case (Interface(ts, _), Interface(es, _)) =>
                     (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
                     case (opt, (IntElem(s1, t1, m1), IntElem(s2, t2, m2))) => 
                             opt.flatMap { xs => 
@@ -463,16 +491,12 @@ enum Term extends HasRegion {
         searchDirect(typ, i, all).orElse(searchFunction(typ, i, all))
 
     def searchDirect(typ: Term, i: I, all: I): Option[Term] = i.headOption match
-        case Some(imp, index) if imp === typ => 
-            //println("found implicit")
-            Some(index)
+        case Some(imp, index) if imp === typ => Some(index)
         case Some(_) => searchDirect(typ, i.tail, all)
         case None => None
 
     def searchFunction(typ: Term, i: I, all: I): Option[Term] = i.headOption match
-        case Some((Imp(t1, t2, _), i)) if t2 === (typ >> 1) => 
-            //println(s"found implicit function $t1 -> $t2")
-            search(t1, all, all).map { arg => App(i, arg, this.r) }
+        case Some((Imp(t1, t2, _), i)) if t2 === (typ >> 1) => search(t1, all, all).map { arg => App(i, arg, this.r) }
         case Some(_) => searchFunction(typ, i.tail, all)
         case None => None
 
@@ -484,7 +508,7 @@ enum Term extends HasRegion {
       * @param i the implicit scope
       * @return type-checking result
       */
-    def checkWithSearch(ty: Term, shape: Option[Term], i: I, c: C): Result[TypeError, (Term, Term)] =
+    def checkWithSearch(ty: Term, shape: Option[Term], i: I, c: C, g: G): Result[TypeError, (Term, Term)] =
         val res = 
             if ty matches shape 
             then Result.Success(this, shape.getOrElse(ty)) 
@@ -493,8 +517,13 @@ enum Term extends HasRegion {
             case (Imp(t1, t2, _), shape) =>
                 search(t1, i, i) match
                     case None => Result.fail(TypeError.Mismatch(shape.get.revert(c), ty.revert(c), this.r))
-                    case Some(arg) => checkWithSearch(t2, shape, i, c).map { (te, ty) => (App(te, arg, this.r), ty) }
+                    case Some(arg) => checkWithSearch(t2, shape, i, c, g).map { (te, ty) => (App(te, arg, this.r), ty) }
             case _ => Result.fail(TypeError.Mismatch(shape.get.revert(c), ty.revert(c), this.r))
+        }.orElse { shape match
+            case Some(shape) if ty.isInstanceOf[Inf] => inferAll(ty, shape, c, g)
+            case _ => if ty.isInstanceOf[Inf]
+                then Result.fail(TypeError.Message("shape neccessary for infering type", this.r))
+                else Result.fail(TypeError.Mismatch(shape.get.revert(c), ty.revert(c), this.r))
         }
 
     def searchAll(ty: Term, i: I, c: C): Result[TypeError, (Term, Term)] = ty match
@@ -503,6 +532,88 @@ enum Term extends HasRegion {
                 this.searchAll(t2, i, c).map { (thi, thy) => (App(thi, value, this.r), thy) }
             case None => Result.fail(TypeError.NoImplicitFound(Some(t1.revert(c)), this.r))
         case other => Result.succeed(this, ty)
+
+    def collectVars(ty: Term): (List[Int], Term) = ty match
+        case Inf(t1, t2, r, x) => 
+            val (xs, t) = t2.collectVars(t2)
+            (0 :: (xs.map(_ + 1)), t)
+        case _ => (Nil, ty)
+
+    // [A] => [B] => (term using A und B)
+    // genEq ==>>    (term using Nat und Type)
+    // A =:= Nat, B =:= Type
+
+    // the missing checks are:
+    // type  -- [A : Type] => [a : A] => t
+    // shape -- [a : Nat] => t[A := Nat, a]
+    // shape transforms to: t[A := Nat, a := 0]
+    // ~~> A =:= Nat, a =:= 0
+    // missing: check [a : Nat] == [a : A] 
+    // i can access g and get (a : Nat) then compare with (a : A) DONE
+    // i can access g and get (a : Nat) then compare with (a : A) DONE
+
+    // TODO consider that shape could be Inf !!! (CANNOT BE INF BECAUSE OF BEGINNING OF TRANSFORM)
+    def inferAll(ty: Term, shape: Term, c: C, g: G): Result[TypeError, (Term, Term)] =
+
+        // all [x] variables and the typ after them
+        val (vars, typ) = collectVars(ty)
+        println("  ---  ")
+        println((ty, typ, shape, vars))
+        println(typ)
+        println(shape)
+        // println(typ.genEq(shape, Set.empty, vars))
+        println("  ---  ")
+        typ.genEq(shape >> (vars.max + 1), Set.empty, vars) match
+            case None => 
+                Result.fail(TypeError.Mismatch(shape.revert(c), ty.revert(c), r))
+            case Some(value) => validateGenEqRes(value) match
+                case None => Result.fail(TypeError.Message("failed to match all constraints", this.r))
+                case Some(value) => 
+                    // println(value)
+                    // println(vars)
+                    val notInferred = vars.filter(v => value.forall(_(0) != v))
+                    println(s"VAR $value CTX $g")
+                    // WE HAVE TO INSERT `value` into bindings
+                    // println(notInferred)
+                    if notInferred.nonEmpty
+                    then Result.fail(TypeError.Message(s"no constraint for $notInferred", this.r))
+                    else Result.succeed(this, shape)
+
+    def inferPartialForApp(funType: Term, fun: Term, argType: Term, arg: Term, i: I, c: C, g: G, shape: Option[Term]): Result[TypeError, (Term, Term)] = 
+        // get variables that could be inferred and the type in which the inference will happen
+        val (vars, innerType) = collectVars(funType)
+        fun.searchAll(innerType, i, c).flatMap {
+            case (abs, Pro(input, output, r, x)) => 
+                // val in = input.genEq(argType >> (vars.max + 1), Set.empty, vars)
+                // val out = shape.flatMap(sh => output.genEq(sh >> (vars.max + 1), Set.empty, vars))
+                // in.flatMap(i => out.map(o => i ++ o))
+                input.genEq(argType >> (vars.max + 1), Set.empty, vars) match
+                    case None => Result.fail(TypeError.Message("failed in inferAll(): genEq returned None", this.r))
+                    case Some(value) => validateGenEqRes(value) match
+                        case None => Result.fail(TypeError.Message("failed to match all constraints", this.r))
+                        case Some(inferredVals) => // inference worked :)
+                            // println(vars)
+                            // println(inferredVals)
+                            // we need to reconstruct funType with inferredVals
+                            def reconstruct(ty: Term, currentVar: Int): Term = ty match
+                                case Inf(t1, t2, r, x) => 
+                                    if inferredVals.contains(currentVar) 
+                                    then reconstruct(t2.replace(0, inferredVals(currentVar) << currentVar) << 1, currentVar - 1)
+                                    else Inf(t1, reconstruct(t2, currentVar - 1), r, x)
+                                case Pro(u1, u2, r2, _) => u2.replace(0, arg >> 1) << 1 // shifting not defined
+                                case _ => throw new Exception("cant happen!")
+                                // println(inferredVals.size)
+                                App(abs, arg, this.r).checkWithSearch(reconstruct(funType, vars.max), shape, i, c, g)
+                            // Result.succeed(App(abs, arg, this.r), reconstruct(funType, vars.max))
+            case e => Result.fail(TypeError.Message(s"product type expected! [[$e]](in partialForApp)", this.r))
+        }
+
+    def validateGenEqRes(res: List[(Int, Term)]) = 
+            val map = res.groupBy(_(0))
+            if map.forall { 
+                case (i, (_, x) :: xs) => xs.forall(_(1) === x)
+                case (i, _) => true // can't happen
+            } then Some(map.map(_(1).head)) else None
 
     /** Generate the type of `this` and an expected `shape` of the type, while simultaneously resolving implicits.
       * @param g explicit scope
@@ -523,17 +634,30 @@ enum Term extends HasRegion {
                         (Abs(te, te.r, y), Imp(t1te, ty, r))
                     }
                 )
+            case Some(Inf(t1, t2, r, x)) => 
+                // valid
+                println("gen inf")
+                t1.transform(g, i, c, Some(Typ(this.r))).flatMap((t1te, _) =>
+                    val (y, ctx) = put(c, x)
+                    // BEGIN critical part
+                    (this >> 1).transform((g >> 1) + (0 -> (t1te >> 1)), i >> 1, ctx, Some(t2)).map { (te, ty) => 
+                        (te << 1, Inf(t1te, ty, r, x)) // TODO is the downshift valid??
+                    }
+                    // END critical part
+                )
             // case Some(Result.Failure(value)) => Result.Failure(value)
             // otherwise match on this and apply typechecking rules
             case shape          => this match
                 // checks if Typ matches shape
-                case Typ(r) => Typ(r).checkWithSearch(Typ(r), shape, i, c)
+                case Typ(r) => Typ(r).checkWithSearch(Typ(r), shape, i, c, g)
                 // get type from context
                 case Var(x, tag, r) => g get x match
                     // checks if variable matches shape
-                    case Some(value) => Var(x, tag, r).checkWithSearch(value, shape, i, c)
+                    case Some(value) => Var(x, tag, r).checkWithSearch(value, shape, i, c, g)
                     // report undefined variable type
-                    case None => Result.fail(TypeError.Undefined(x.toString, this.r))
+                    case None => 
+                        // throw new Exception("crash")
+                        Result.fail(TypeError.Undefined(x.toString, this.r))
                 // use shape to generate type for abstraction
                 case Abs(t, r1, x1) => shape match       // Done WILL SHAPE BE NORMAL-FORM? I think not e. g. because of t2  (... evaluate with implicits inserted !!)
                     case Some(Pro(t1, t2, r2, x2)) =>    // Done SHOULD t1 be checked to be nonempty
@@ -543,23 +667,116 @@ enum Term extends HasRegion {
                         }
                     case Some(other) => Result.fail(TypeError.Unexpected(s"product type", this.r))
                     case _ => Result.fail(TypeError.Unexpected("product type", this.r))
-                // typecheck t1 and use the result to typecheck t2
-                case App(t1, t2, r1) =>
+                // typecheck t1 and use the result to typecheck t2 (OLD STRATEGY)
+                // case App(t1, t2, r1) =>
+                //     t1.transform(g, i, c, None).flatMap { (te, ty) =>
+                //         te.searchAll(ty, i, c).flatMap {
+                //             case (abs, Pro(u1, u2, r2, _)) =>
+                //                 t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
+                //                     App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
+                //                 }
+                //             case (_, _) => Result.fail(TypeError.Unexpected("product type", this.r))
+                //         }
+                //     }
+
+
+                // SOMEWHERE MISSING SHIFT
+                case App(t1, t2, r1) => 
                     t1.transform(g, i, c, None).flatMap { (te, ty) =>
-                        te.searchAll(ty, i, c).flatMap {
+                        if ty.isInstanceOf[Inf] then
+                            t2.transform(g, i, c, None).flatMap { (t2te, t2ty) =>
+                                inferPartialForApp(ty, te, t2ty, t2te, i, c, g, shape)
+                            }
+                        else
+                            te.searchAll(ty, i, c).flatMap {
                             case (abs, Pro(u1, u2, r2, _)) =>
                                 t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
-                                    App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
+                                    App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c, g)
                                 }
                             case (_, _) => Result.fail(TypeError.Unexpected("product type", this.r))
                         }
                     }
+
+                // case App(t1, t2, r1) => shape match
+                //     case None =>
+                //         t1.transform(g, i, c, None).flatMap { (te, ty) =>
+                //         }
+                //     case Some(shape) => ???
+
+                // case App(t1, t2, r1) =>
+                //     // typecheck t1
+                //     t1.transform(g, i, c, None).flatMap { (te, ty) =>
+                //         // resolve implicits
+                //         te.searchAll(ty.eval, i, c).flatMap {
+                //             // no inference necessary
+                //             case (abs, Pro(u1, u2, r2, _)) =>
+                //                 t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
+                //                     App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
+                //                 }
+                //             // inference necessary
+                //             case (abs, inf: Inf) =>
+                //                 // typecheck t2
+                //                 t2.transform(g, i, c, None).flatMap { (t2te, t2ty) =>
+                //                         val (vars, innerType) = collectVars(inf)
+                //                         innerType.eval match
+                //                             case Pro(u1, u2, r, x) => 
+                //                                 u1.genEq(t2ty, Set.empty, vars).flatMap(validateGenEqRes) match
+                //                                     case Some(value) => 
+                //                                         val returnType = value.foldLeft(u2) {
+                //                                             case (target, (v, te)) => target.replace(v, te)
+                //                                         }
+                //                                         App(abs, t2te, r1).checkWithSearch((returnType.replace(0, t2te >> 1) << 1), shape, i, c)
+
+                //                                     case None => Result.fail(TypeError.Message("failed sadly :(", this.r))
+                //                             case _ => Result.fail(TypeError.Unexpected("product type (during inference)", this.r))
+
+                //                     // case Some(value) =>
+                //                     //     // resolve implicits
+                //                     //     abs.inferAll(inf, Pro(t2ty, value, this.r, ""), c).flatMap { (_, _) =>
+                //                     //         App(abs, t2te, r1).checkWithSearch((value.replace(0, t2te >> 1) << 1), shape, i, c)
+                //                     //     }
+
+                //                 }
+                //             case (_, _) => Result.fail(TypeError.Unexpected("product type", this.r))
+                //         }
+                //     }
+
+                // case App(t1, t2, r1) =>
+                //     // typecheck t1
+                //     t1.transform(g, i, c, None).flatMap { (te, ty) =>
+                //         if ty.isInstanceOf[Inf] then
+                //             // typecheck t2
+                //             t2.transform(g, i, c, None).flatMap { (t2te, t2ty) =>
+                //                 if shape.isDefined then
+                //                     te.inferAll(ty, Pro(t2ty, shape.get, this.r, ""), c)
+                //                 else ???
+                //                 App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
+                //             }
+                //             // inferAll()
+                //         else
+                //             te.searchAll(ty, i, c).flatMap {
+                //                 case (abs, Pro(u1, u2, r2, _)) =>
+                //                     t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
+                //                         App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
+                //                     }
+                //                 case (_, _) => Result.fail(TypeError.Unexpected("product type", this.r))
+                //             }
+                //     }
+
+
                 // parameter and result should be a type
                 case Pro(t1, t2, r1, x) =>
                     t1.transform(g, i, c, Some(Typ(r1))).flatMap { (u1, _) =>
                         val (y, ctx) = t2.put(c, x)
                         t2.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, ctx, Some(Typ(r1))).flatMap { (u2, _) =>
-                            Pro(u1, u2, r1, y).checkWithSearch(Typ(r1), shape, i, c)
+                            Pro(u1, u2, r1, y).checkWithSearch(Typ(r1), shape, i, c, g)
+                        }
+                    }
+                case Inf(t1, t2, r1, x) =>
+                    t1.transform(g, i, c, Some(Typ(r1))).flatMap { (u1, _) =>
+                        val (y, ctx) = t2.put(c, x)
+                        t2.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, ctx, Some(Typ(r1))).flatMap { (u2, _) =>
+                            Inf(u1, u2, r1, y).checkWithSearch(Typ(r1), shape, i, c, g)
                         }
                     }
                 // search for implicit to match shape
@@ -573,17 +790,13 @@ enum Term extends HasRegion {
                 case Imp(t1, t2, r) =>
                     t1.transform(g, i, c, Some(Typ(t1.r))).flatMap { (u1, _) =>
                         t2.transform(g >> 1, (i >> 1) + (t1 -> Var(0, None, this.r)), (c >> 1), Some(Typ(r))).flatMap { (u2, _) =>
-                            Imp(u1, u2, r).checkWithSearch(Typ(this.r), shape, i, c)
+                            Imp(u1, u2, r).checkWithSearch(Typ(this.r), shape, i, c, g)
                         }
                     }
-                // check te against ty and then verify the shape
-                // case As(te, ty) => te.transform(g, i, Some(ty)).flatMap { (ue, uy) =>
-                //     ue.checkWithSearch(uy, shape.orElse(Some(ty)), i)
-                // }
                 case As(te, ty, r) => 
                     ty.transform(g, i, c, Some(Typ(r))).flatMap { (ty, _) =>
                             te.transform(g, i, c, Some(ty)).flatMap { (ue, uy) =>
-                            As(ue, ty, r).checkWithSearch(uy, shape.orElse(Some(ty)), i, c)
+                            As(ue, ty, r).checkWithSearch(uy, shape.orElse(Some(ty)), i, c, g)
                         }
                     }
 
@@ -593,7 +806,7 @@ enum Term extends HasRegion {
                     case Some(_) => Result.fail(TypeError.Unexpected("interface", this.r))
 
                 case Interface(fields, _) => checkInterface(fields, Nil, g, i, c).flatMap { (te, ty) =>
-                    te.checkWithSearch(ty, shape, i, c)
+                    te.checkWithSearch(ty, shape, i, c, g)
                 }
 
                 case Get(t, field, r) => t.transform(g, i, c, None).flatMap { (te, ty) =>
@@ -601,18 +814,19 @@ enum Term extends HasRegion {
                         case (te, Interface(fields, _)) => 
                             fields.find(_.name == field) match
                                 case Some(IntElem(name, typ, mode)) =>
-                                    //println(s"$typ -- $shape [${g.mkString(", ")}]")
-                                    Get(te, field, r).checkWithSearch(typ.replace(0, te >> 1) << 1, shape, i, c) // should `te` be shifted?
+                                    // println(s"$typ -- $shape [${g.mkString(", ")}]")
+                                    Get(te, field, r).checkWithSearch(typ.replace(0, te >> 1) << 1, shape, i, c, g) // should `te` be shifted?
                                 case _ => Result.fail(TypeError.NoField(t.revert(c), field, this.r))
                         case (te, ty) =>
                             Result.fail(TypeError.NoField(t.revert(c), field, this.r))
                     }
                 }
 
-                case Nat(value, r) => if value >= 0 then Nat(value, r).checkWithSearch(NatType(r), shape, i, c) else Result.fail(TypeError.Message("natural numbers are >= 0", this.r))
+                // searchAlls are missing !!
+                case Nat(value, r) => if value >= 0 then Nat(value, r).checkWithSearch(NatType(r), shape, i, c, g) else Result.fail(TypeError.Message("natural numbers are >= 0", this.r))
                 case NatType(r) => Result.Success(NatType(r), Typ(r))
-                case Succ(t, r) => t.transform(g, i, c, Some(NatType(r))).flatMap((te, ty) => Succ(te, r).checkWithSearch(NatType(r), shape, i, c))
-                case Debug(t, r) => t.transform(g, i, c, Some(NatType(r))).flatMap((te, ty) => Debug(te, r).checkWithSearch(NatType(r), shape, i, c))
+                case Succ(t, r) => t.transform(g, i, c, Some(NatType(r))).flatMap((te, ty) => Succ(te, r).checkWithSearch(NatType(r), shape, i, c, g))
+                case Debug(t, r) => t.transform(g, i, c, Some(NatType(r))).flatMap((te, ty) => Debug(te, r).checkWithSearch(NatType(r), shape, i, c, g))
                 case Match(t, onZero, onSucc, r, x) => t.transform(g, i, c, Some(NatType(r))).flatMap { (te, ty) =>
                     onZero.transform(g, i, c, shape).flatMap { (z, zt) => 
                         val (y, ctx) = onSucc.put(c, x)

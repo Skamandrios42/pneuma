@@ -88,4 +88,100 @@ class ParserTests extends AnyFunSuite {
                 )))
         yield println(b.genEq(a, Set.empty, List(0, 1)))
     }
+
+    test("scalaBug") {
+        import Term.*
+
+        extension (self: Term) {
+        def genBug(that: Term, relation: Term#R, variables: List[Int]): Option[List[(Int, Term)]] =
+            println(s"genBug [$self] === [$that]  ---- ${self.getClass} / ${that.getClass}")
+            import self.{>>, &&, <<}
+
+            if relation(self, that) then Some(Nil) else
+                // relation with assumed equivalence of self and right
+                def updatedRelation = relation + ((self, that))
+                (self.eval, that.eval) match
+                    case (Var(x, _, _), term) => 
+                        println(s"VAR $x ---> $term")
+                        Option.when(variables contains x)((x, term) :: Nil)
+                    case (Abs(t, _, _), Abs(e, _, _)) => 
+                        println("ABS")
+                        t.genBug(e, updatedRelation, variables >> 1) << 1
+                    case (App(t1, t2, _), App(e1, e2, _)) =>
+                        println("APP")
+                        t1.genBug(e1, updatedRelation, variables) && t2.genBug(e2, updatedRelation, variables)
+                    case (Typ(_), Typ(_)) => 
+                        println("TYP")
+                        Some(Nil)
+                    case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
+                    case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) => 
+                        println("PRO")
+                        t1.genBug(e1, updatedRelation, variables) && (t2.genBug(e2, updatedRelation, variables >> 1) << 1)
+                    case (Imp(t1, t2, _), Imp(e1, e2, _)) => 
+                        println("IMP")
+                        t1.genBug(e1, updatedRelation, variables) && (t2.genBug(e2, updatedRelation, variables >> 1) << 1)
+                    case (Module(ts, _), Module(es, _)) => 
+                        println("MOD")
+                        (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
+                            case (opt, (ModElem(s1, t1, m1), ModElem(s2, t2, m2))) => 
+                                opt.flatMap { xs => 
+                                    (t1.genBug(t2, updatedRelation, variables >> 1) << 1).flatMap { ys =>
+                                        Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
+                                    }
+                                }
+                        }
+                    case (Interface(ts, _), Interface(es, _)) => 
+                        println("INT")
+                        (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
+                        case (opt, (IntElem(s1, t1, m1), IntElem(s2, t2, m2))) => 
+                                opt.flatMap { xs => 
+                                    (t1.genBug(t2, updatedRelation, variables >> 1) << 1).flatMap { ys =>
+                                        Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
+                                    }
+                                }
+                        }
+                    case (As(t1, t2, _), As(e1, e2, _)) => println("AS")
+                        t1.genBug(e1, updatedRelation, variables) && t2.genBug(e2, updatedRelation, variables)
+                    case (Get(t, f1, _), Get(e, f2, _)) => println("GET")
+                        t.genBug(e, updatedRelation, variables).filter(_ => f1 == f2)
+                    case (NatType(_), NatType(_)) => println("NATTYPE")
+                        Some(Nil)
+                    case (Nat(v1, _), Nat(v2, _)) => println("NAT")
+                        Option.when(v1 == v2)(Nil)
+                    case (Succ(t1, _), Succ(t2, _)) => println("SUC")
+                        t1.genBug(t2, updatedRelation, variables)
+                    case (Debug(t1, _), Debug(t2, _)) => println("DEB")
+                        t1.genBug(t2, updatedRelation, variables)
+                    case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => println("MAT")
+                        t1.genBug(t2, updatedRelation, variables) && z1.genBug(z2, updatedRelation, variables) && (s1.genBug(s2, updatedRelation, variables >> 1) << 1)
+                    case _ => println("NONE")
+                        None
+        }
+        // genBug(App())
+    }
+
+    // test("inferAll") {
+    //     val one = """[A : Type] => [B : Type] => A => B => A"""
+    //     val two = """Nat => Type => Nat"""
+    //     for
+    //         a <- PneumaParser(one).flatMap(_.convert(Map.empty))
+    //         b <- PneumaParser(two).flatMap(_.convert(Map.empty))
+    //     yield println(Term.Typ(Region(None, 0, 0)).inferAll(a, b, Map.empty))
+    // }
+
+    // test("inferPartial") {
+    //     import Term.*
+
+    //     val one = """[A : Type] => [B : Type] => [C : Type] => A => B => A"""
+    //     val two = """[A : Type] => [B : Type] => [C : Type] => B => B => C"""
+    //     val thr = """[A : Type] => [B : Type] => [C : Type] => C => B => A"""
+    //     for
+    //         a <- PneumaParser(one).flatMap(_.convert(Map.empty))
+    //         b <- PneumaParser(two).flatMap(_.convert(Map.empty))
+    //         c <- PneumaParser(thr).flatMap(_.convert(Map.empty))
+    //     yield 
+    //         println(a.inferPartialForApp(a, Term.Var(0, None, Region.none), Map.empty).map(_.revert(Map(0 -> "X"))))
+    //         println(b.inferPartialForApp(b, Term.Var(0, None, Region.none), Map.empty).map(_.revert(Map(0 -> "X"))))
+    //         println(c.inferPartialForApp(c, Term.Var(0, None, Region.none), Map.empty).map(_.revert(Map(0 -> "X"))))
+    // }
 }

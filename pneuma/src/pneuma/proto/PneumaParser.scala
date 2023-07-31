@@ -23,6 +23,7 @@ object PneumaParser {
                 case Program.Phi(r) => Program.Phi(region)
                 case Program.Pro(x, t1, t2, r) => Program.Pro(x, t1, t2, region)
                 case Program.Imp(t1, t2, r) => Program.Imp(t1, t2, region)
+                case Program.Inf(x, t1, t2, r) => Program.Inf(x, t1, t2, region)
                 case Program.Module(fields, r) => Program.Module(fields, region)
                 case Program.Interface(fields, r) => Program.Interface(fields, region)
                 case Program.Get(t, field, r) => Program.Get(t, field, region)
@@ -104,7 +105,17 @@ object PneumaParser {
         out <- imp
     yield Program.Pro(Some(x), in, out)
 
-    lazy val expr = (query or typ or natType or natural or product or abstraction or variable or typedModule or module or interface).track
+    lazy val inferred = for
+        _   <- str("[")
+        x   <- ident.spaced
+        _   <- str(":").spaced
+        in  <- imp.spaced
+        _   <- str("]").spaced
+        _   <- str("=>").spaced
+        out <- imp
+    yield Program.Inf(x, in, out)
+
+    lazy val expr = (query or typ or natType or natural or product or inferred or abstraction or variable or typedModule or module or interface).track
 
     lazy val get: PParser = (expr.track <*> (".".spaced *> ident.tracked(None)).repeat).map {
         case (te, seq) => seq.foldLeft(te) { case (t, (f, r)) => Program.Get(t, f, t.r join r) }
