@@ -5,12 +5,12 @@ import general.Metadata
 import general.Pos
 
 enum TypeError extends CompileError {
-    case Mismatch(expected: Program, found: Program, region: Metadata)
-    case Unexpected(expected: String, region: Metadata)
-    case Undefined(variable: String, region: Metadata)
-    case NoImplicitFound(shape: Option[Program], region: Metadata)
-    case NoField(t: Program, field: String, region: Metadata)
-    case Message(msg: String, region: Metadata)
+    case Mismatch(expected: Program, found: Program, meta: Metadata)
+    case Unexpected(expected: String, meta: Metadata)
+    case Undefined(variable: String, meta: Metadata)
+    case NoImplicitFound(shape: Option[Program], meta: Metadata)
+    case NoField(t: Program, field: String, meta: Metadata)
+    case Message(msg: String, meta: Metadata)
     def name = "Type Error"
     def message: String = this match
         case Mismatch(expected, found, region) => s"expected '$expected', but found '$found'"
