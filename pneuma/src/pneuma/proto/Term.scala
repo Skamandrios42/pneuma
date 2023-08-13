@@ -483,7 +483,7 @@ enum Term derives HasMeta {
     //     }
 
     def genEq(that: Term, relation: R, variables: List[Int]): Option[List[(Int, Term)]] =
-        // println(s"genEq [$this] === [$that]  ---- ${this.getClass} / ${that.getClass}")
+        println(s"genEq [$this] === [$that] with $variables")
 
         if relation(this, that) then Some(Nil) else
             // relation with assumed equivalence of this and right
@@ -505,6 +505,8 @@ enum Term derives HasMeta {
                 case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) =>
                     t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
                 case (Imp(t1, t2, _), Imp(e1, e2, _)) =>
+                    t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Inf(t1, t2, _, _), Inf(e1, e2, _, _)) =>
                     t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
                 case (Module(ts, _), Module(es, _)) =>
                     (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
@@ -549,9 +551,9 @@ enum Term derives HasMeta {
         }
 
     def resolve(reqs: List[Req], t: Term, u: Term, g: G, i: I, c: C): Result[TypeError, Map[Int, Term]] =
-        val vars = List.range(0, reqs.length).filter(i => reqs(i).isInstanceOf[Req.Inf])
+        val vars = List.range(0, reqs.length).filter(i => reqs(reqs.length - 1 - i).isInstanceOf[Req.Inf])
         t.genEq(u >> reqs.length, Set.empty, vars) match
-            case None => Result.fail(TypeError.Message("t and u are unequal in resolve(reqs, t, u)", this.meta))
+            case None => Result.fail(TypeError.Message(s"$t and ${u >> reqs.length} are unequal in resolve(reqs, t, u)", this.meta))
             case Some(result) => validateGenEqRes(result) match
                 case None => Result.fail(TypeError.Message("constraints cannot be unified", this.meta))
                 case Some(constraints) =>
@@ -589,11 +591,11 @@ enum Term derives HasMeta {
                     then reconstruct(te, t2.replace(0, map(v) << v) << 1, v - 1)
                     else reconstruct(te, t2, v - 1).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
                 case Imp(t1, t2, meta) =>
-                    search(te, i).map { imp =>
+                    search(t1, i).map { imp =>
                         reconstruct(te, t2, v - 1).map { (newTe, newTy) => 
                             (App(newTe, imp, this.meta), newTy)
                         }
-                    }.getOrElse(Result.fail(TypeError.Message("No implicit found", this.meta)))
+                    }.getOrElse(Result.fail(TypeError.Message(s"No implicit found $t1 in $i", this.meta)))
                 case other => Result.succeed(te, other)
 
             reconstruct(te, ty, reqs.length - 1).flatMap { (te, ty) =>
@@ -616,7 +618,7 @@ enum Term derives HasMeta {
                             then reconstruct(te, t2.replace(0, map(v) << v) << 1, v - 1)
                             else reconstruct(te, t2, v - 1).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
                         case Imp(t1, t2, meta) =>
-                            search(te, i).map { imp =>
+                            search(t1, i).map { imp =>
                                 reconstruct(te, t2, v - 1).map { (newTe, newTy) => 
                                     (App(newTe, imp, this.meta), newTy)
                                 }

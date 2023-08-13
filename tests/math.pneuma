@@ -1,0 +1,3 @@
+summon : [A : Type] => A =?> A = ?,
+?nat : Nat = 42,
+main : Nat = debug summon
