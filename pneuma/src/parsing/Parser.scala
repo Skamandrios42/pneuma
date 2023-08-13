@@ -1,8 +1,7 @@
 package parsing
 
 import general.Result
-import general.Region
-import parsing.Parser.AttachRegion
+import general.{Metadata, HasMeta}
 import parsing.Parser.GetPos
 
 object Parser {
@@ -19,11 +18,8 @@ object Parser {
         def result[E, A](value: => Result[E, A]): Parser[S, E, A] = (value, _)
     }
 
-    trait AttachRegion[A] {
-        def file: Option[String]
-        extension (self: A) def attach(region: Region): A
-    }
     trait GetPos[S] {
+        // ADD FILE SUPPORT
         extension (self: S) def getIndex: Int
     }
 
@@ -40,17 +36,17 @@ trait Parser[S, +E, +A] extends (S => (Result[E, A], S)) {
         this(_) match
             case (Result.Success(value), src) => (Result.Success(f(value)), src)
             case (Result.Failure(value), src) => (Result.Failure(value), src)
-    def track[A1 >: A](using AttachRegion[A1], GetPos[S]): Parser[S, E, A1] = src =>
+    def track[A1 >: A](using HasMeta[A1], GetPos[S]): Parser[S, E, A1] = src =>
         val start = src.getIndex
         val (res, newSrc) = this(src)
         val end = newSrc.getIndex
-        (res.map(_.attach(Region(summon[AttachRegion[A1]].file, start, end))), newSrc)
+        (res.map(_.attach(Metadata(None, start, end))), newSrc)
 
-    def tracked(file: Option[String])(using GetPos[S]): Parser[S, E, (A, Region)] = src =>
+    def tracked(file: Option[String])(using GetPos[S]): Parser[S, E, (A, Metadata)] = src =>
         val start = src.getIndex
         val (res, newSrc) = this(src)
         val end = newSrc.getIndex
-        (res.map((_, Region(file, start, end))), newSrc)
+        (res.map((_, Metadata(file, start, end))), newSrc)
 
     def transform[E1 >: E, A1 >: A, F, B](fa: A1 => B, fe: E1 => F): Parser[S, F, B] =
         this(_) match

@@ -5,36 +5,11 @@ import parsing.Parser
 import general.Result
 import java.nio.file.{Files, Path}
 import scala.util.matching.Regex
-import general.Region
+import general.Metadata
 import scala.collection.immutable.ArraySeq
-import parsing.Parser.AttachRegion
 import parsing.Parser.GetPos
 
 object PneumaParser {
-
-    given AttachRegion[Program] with {
-        def file = None
-        extension (self: Program) {
-            def attach(region: Region): Program = self match
-                case Program.Var(x, r) => Program.Var(x, region)
-                case Program.Abs(x, t, r) => Program.Abs(x, t, region)
-                case Program.App(t1, t2, r) => Program.App(t1, t2, region)
-                case Program.Typ(r) => Program.Typ(region)
-                case Program.Phi(r) => Program.Phi(region)
-                case Program.Pro(x, t1, t2, r) => Program.Pro(x, t1, t2, region)
-                case Program.Imp(t1, t2, r) => Program.Imp(t1, t2, region)
-                case Program.Inf(x, t1, t2, r) => Program.Inf(x, t1, t2, region)
-                case Program.Module(fields, r) => Program.Module(fields, region)
-                case Program.Interface(fields, r) => Program.Interface(fields, region)
-                case Program.Get(t, field, r) => Program.Get(t, field, region)
-                case Program.As(te, ty, r) => Program.As(te, ty, region)
-                case Program.NatType(r) => Program.NatType(region)
-                case Program.Nat(value, r) => Program.Nat(value, region)
-                case Program.Succ(t, r) => Program.Succ(t, region)
-                case Program.Debug(t, r) => Program.Debug(t, region)
-                case Program.Match(t, onZero, onSucc, r) => Program.Match(t, onZero, onSucc, region)
-        }
-    }
 
     given GetPos[Source] with {
       extension (self: Source) override def getIndex: Int = self.index
@@ -67,7 +42,7 @@ object PneumaParser {
     lazy val variable = ident.map(Program.Var(_)).track or ("(" *> imp.spaced <* ")")
 
     lazy val natural = integer.filter(_ >= 0)(
-        e => ParseError("non-negative number", "negative number", Region(None, e.index, e.index))
+        e => ParseError("non-negative number", "negative number", Metadata(None, e.index, e.index))
     ).map(Program.Nat(_))
 
     lazy val abstraction: Parser[Source, ParseError, Program.Abs] = for
@@ -118,7 +93,7 @@ object PneumaParser {
     lazy val expr = (query or typ or natType or natural or product or inferred or abstraction or variable or typedModule or module or interface).track
 
     lazy val get: PParser = (expr.track <*> (".".spaced *> ident.tracked(None)).repeat).map {
-        case (te, seq) => seq.foldLeft(te) { case (t, (f, r)) => Program.Get(t, f, t.r join r) }
+        case (te, seq) => seq.foldLeft(te) { case (t, (f, r)) => Program.Get(t, f, t.meta join r) }
     }
 
     lazy val matchStatement = (get <*> ("match".spaced <*> "{" <*> imp.spaced <*> "," <*> abstraction.track.spaced <*> "}").opt).map {
@@ -130,13 +105,13 @@ object PneumaParser {
         case (te, seq) => seq.foldLeft(te) { 
             case (Program.Var("S", r), (arg, r1)) => Program.Succ(arg).attach(r join r1)
             case (Program.Var("debug", r), (arg, r1)) => Program.Debug(arg).attach(r join r1)
-            case (abs, (arg, r1)) => Program.App(abs, arg, abs.r join r1) }
+            case (abs, (arg, r1)) => Program.App(abs, arg, abs.meta join r1) }
     }
 
     lazy val app2: PParser = (matchStatement.track <* skip).fold { // here is the error
-        case (Program.Var("S", r), arg) => Program.Succ(arg).attach(r join arg.r)
-        case (Program.Var("debug", r), arg) => Program.Debug(arg).attach(r join arg.r)
-        case (abs, arg) => Program.App(abs, arg).attach(abs.r join arg.r)
+        case (Program.Var("S", r), arg) => Program.Succ(arg).attach(r join arg.meta)
+        case (Program.Var("debug", r), arg) => Program.Debug(arg).attach(r join arg.meta)
+        case (abs, arg) => Program.App(abs, arg).attach(abs.meta join arg.meta)
     }
 
     lazy val as: PParser = (app <*> (str(":").spaced *> as).opt).map {

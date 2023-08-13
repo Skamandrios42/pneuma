@@ -6,9 +6,6 @@ import java.nio.file.Path
 import scala.util.Try
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ListBuffer
-import general.Region
-import general.Pos
-import general.CompileError
 
 object Compiler {
 

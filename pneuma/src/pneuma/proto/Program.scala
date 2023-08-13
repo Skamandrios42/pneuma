@@ -19,29 +19,29 @@ object Program {
 
 }
 
-enum Program extends HasRegion {
-    case Var(x: String, r: Region = Region(None, 0, 0))
-    case Abs(x: String, t: Program, r: Region = Region(None, 0, 0))
-    case App(t1: Program, t2: Program, r: Region = Region(None, 0, 0))
-    case Typ(r: Region = Region(None, 0, 0))
-    case Phi(r: Region = Region(None, 0, 0))
-    case Pro(x: Option[String], t1: Program, t2: Program, r: Region = Region(None, 0, 0))
-    case Imp(t1: Program, t2: Program, r: Region = Region(None, 0, 0))
-    case Inf(x: String, t1: Program, t2: Program, r: Region = Region(None, 0, 0))
-    case Module(fields: List[ModElem], r: Region = Region(None, 0, 0))
-    case Interface(fields: List[IntElem], r: Region = Region(None, 0, 0))
-    case Get(t: Program, field: String, r: Region = Region(None, 0, 0))
-    case As(te: Program, ty: Program, r: Region = Region(None, 0, 0))
-    case NatType(r: Region = Region(None, 0, 0))
-    case Nat(value: Int, r: Region = Region(None, 0, 0))
-    case Succ(t: Program, r: Region = Region(None, 0, 0))
-    case Debug(t: Program, r: Region = Region(None, 0, 0))
-    case Match(t: Program, onZero: Program, onSucc: Abs, r: Region = Region(None, 0, 0))
+enum Program derives HasMeta {
+    case Var(x: String, meta: Metadata = Metadata(None, 0, 0))
+    case Abs(x: String, t: Program, meta: Metadata = Metadata(None, 0, 0))
+    case App(t1: Program, t2: Program, meta: Metadata = Metadata(None, 0, 0))
+    case Typ(meta: Metadata = Metadata(None, 0, 0))
+    case Phi(meta: Metadata = Metadata(None, 0, 0))
+    case Pro(x: Option[String], t1: Program, t2: Program, meta: Metadata = Metadata(None, 0, 0))
+    case Imp(t1: Program, t2: Program, meta: Metadata = Metadata(None, 0, 0))
+    case Inf(x: String, t1: Program, t2: Program, meta: Metadata = Metadata(None, 0, 0))
+    case Module(fields: List[ModElem], meta: Metadata = Metadata(None, 0, 0))
+    case Interface(fields: List[IntElem], meta: Metadata = Metadata(None, 0, 0))
+    case Get(t: Program, field: String, meta: Metadata = Metadata(None, 0, 0))
+    case As(te: Program, ty: Program, meta: Metadata = Metadata(None, 0, 0))
+    case NatType(meta: Metadata = Metadata(None, 0, 0))
+    case Nat(value: Int, meta: Metadata = Metadata(None, 0, 0))
+    case Succ(t: Program, meta: Metadata = Metadata(None, 0, 0))
+    case Debug(t: Program, meta: Metadata = Metadata(None, 0, 0))
+    case Match(t: Program, onZero: Program, onSucc: Abs, meta: Metadata = Metadata(None, 0, 0))
 
     extension (self: Map[String, Term]) def >>(amount: Int) = self.map((s, i) => (s, i >> amount))
 
     def convert(ctx: Map[String, Term]): Result[TypeError, Term] = this match
-        case Program.Var(x, r) if ctx.contains(x) => Result.succeed(ctx(x).rOf(Term.Var(0, None, r)))
+        case Program.Var(x, r) if ctx.contains(x) => Result.succeed(ctx(x).metaOf(Term.Var(0, None, r)))
         case Program.Var(x, r) => Result.fail(TypeError.Undefined(x, r))
         case Program.Abs(x, t, r) => t.convert((ctx >> 1) + (x -> Term.Var(0, None, r))).map(Term.Abs(_, r, x))
         case Program.App(t1, t2, r) => t1.convert(ctx).flatMap(a => t2.convert(ctx).map(b => Term.App(a, b, r)))

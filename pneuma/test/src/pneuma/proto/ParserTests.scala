@@ -5,7 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import general.Result
 import scala.collection.immutable.ArraySeq
-import general.Region
+import general.Metadata
 
 class ParserTests extends AnyFunSuite {
     test("parsing") {
@@ -83,8 +83,8 @@ class ParserTests extends AnyFunSuite {
         for
             a <- PneumaParser(one).flatMap(_.convert(Map.empty))
             b <- PneumaParser(two).flatMap(_.convert(Map(
-                "A" -> Term.Var(1, None, Region(None, 0, 0)),
-                "B" -> Term.Var(0, None, Region(None, 0, 0))
+                "A" -> Term.Var(1, None, Metadata(None, 0, 0)),
+                "B" -> Term.Var(0, None, Metadata(None, 0, 0))
                 )))
         yield println(b.genEq(a, Set.empty, List(0, 1)))
     }
