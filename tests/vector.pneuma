@@ -1,0 +1,13 @@
+# vector type
+Vector : Nat => Type = \x -> x match { Nat, \k -> { head : Nat, tail : Vector k } },
+head : [n : Nat] => Vector (S n) => Nat = \m -> m.head,
+tail : [n : Nat] => Vector (S n) => Vector n = \m -> m.tail,
+prep : [n : Nat] => Nat => Vector n => Vector (S n) = \x -> \m -> { head = x, tail = m },
+
+v : Vector 4 = { head = 3, tail = { head = 12, tail = { head = 1, tail = { head = 0, tail = 42 }}}},
+?n : Nat = 666,
+
+test : [A : Type] => A =?> A = ?,
+
+nums : Vector 5 = prep (test) v,
+main : Nat = debug (head nums)

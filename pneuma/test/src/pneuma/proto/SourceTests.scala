@@ -10,4 +10,9 @@ class SourceTests extends AnyFunSuite {
         Seq("java", "tests/math").!
     }
 
+    test("vector.pneuma") {
+        Compiler.main(Array("tests/vector.pneuma"))
+        Seq("java", "tests/vector").!
+    }
+
 }
