@@ -638,13 +638,15 @@ enum Term derives HasMeta {
         case other => (Nil, other)
 
     def resolveAll(te: Term, ty: Term, shape: Term, g: G, i: I, c: C): Result[TypeError, (Term, Term)] = 
+        println(s"resolveAll($te, $ty, $shape)")
         val (reqs, core) = ty.requirements
         resolve(reqs, core, shape, g, i, c).flatMap { map =>
             // reconstruct by using map and implicit search
             def reconstruct(te: Term, ty: Term, v: Int): Result[TypeError, (Term, Term)] = ty match
                 case Inf(t1, t2, r, x) => 
                     if map.contains(v)
-                    then reconstruct(te, t2.replace(0, map(v) << v) << 1, v - 1)
+                    then 
+                        reconstruct(te, t2.replace(0, map(v) << v + 1) << 1, v - 1)
                     else reconstruct(te, t2, v - 1).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
                 case Imp(t1, t2, meta) =>
                     search(t1, i).map { imp =>
@@ -654,10 +656,13 @@ enum Term derives HasMeta {
                     }.getOrElse(Result.fail(TypeError.Message(s"No implicit found $t1 in $i", this.meta)))
                 case other => Result.succeed(te, other)
 
+            println(s"THIS: $shape --- $ty")
             reconstruct(te, ty, reqs.length - 1).flatMap { (te, ty) =>
                 if ty === shape
                 then Result.Success(te, shape) 
-                else Result.fail(TypeError.Mismatch(shape.revert(c), ty.revert(c), this.meta))
+                else 
+                    println(s"THIS: $shape --- $ty")
+                    Result.fail(TypeError.Mismatch(shape.revert(c), ty.revert(c), this.meta))
             }
         }
 
