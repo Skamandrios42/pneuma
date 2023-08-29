@@ -1,11 +1,13 @@
 test : (constOp : [A : Type] => A => Type) => {
     depp : [A : Type] => [a :  A ] => constOp a =>  A  => constOp a,
-    main :               [a : Nat] => constOp a => Type => constOp a
+    main :               [a : Nat] => constOp a => Nat => constOp a
 }    = \constOp                            -> {
     depp = \x -> \y -> x,
     main = depp
 },
 
-#drop : [X : Type] => X => Nat = \a -> 0,
+drop : [X : Type] => X => Nat = \a -> 0,
 
-main : Nat = 2 #drop ((test (\a -> Nat) ).main)
+f : [A : Type] => A => Type = \a -> Nat,
+
+main : Nat = drop ((test ((\a -> Nat) : ([A : Type] => A => Type) )))

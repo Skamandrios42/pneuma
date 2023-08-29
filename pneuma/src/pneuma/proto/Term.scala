@@ -3,6 +3,7 @@ package pneuma.proto
 import scala.annotation.targetName
 import Term.{IntElem, ModElem, Mode, Req}
 import general.{Result, Metadata, HasMeta}
+import fansi.Color
 
 object Term {
     enum Mode { case Exp, Imp }
@@ -114,12 +115,12 @@ enum Term derives HasMeta {
     override def toString: String = this match
         case Var(x, Some(tag), _) => s"$x"
         case Var(x, None, _) => s"$x"
-        case Abs(t, _, x) => s"(\\|$x| -> $t)"
+        case Abs(t, _, x) => s"(\\ -> $t)"
         case App(t1, t2, _) => s"($t1 $t2)"
         case Typ(_) => "Type"
         case Phi(_) => "?"
-        case Pro(t1, t2, _, x) => s"($t1 |$x| => $t2)"
-        case Inf(t1, t2, _, x) => s"([$t1 |$x|] => $t2)"
+        case Pro(t1, t2, _, x) => s"($t1 => $t2)"
+        case Inf(t1, t2, _, x) => s"([$t1] => $t2)"
         case Imp(t1, t2, _) => s"($t1 =?> $t2)"
         case Module(fields, _) => s"{ ${fields.mkString(", ")} }"
         case Interface(fields, _) => s"{ ${fields.mkString(", ")} }"
@@ -239,7 +240,7 @@ enum Term derives HasMeta {
         case Typ(_) => Typ(Metadata.none)
         case Phi(_) => Phi(Metadata.none)
         case Pro(t1, t2, _, _) => Pro(t1.erase, t2.erase, Metadata.none, "")
-        case Inf(t1, t2, _, _) => Pro(t1.erase, t2.erase, Metadata.none, "")
+        case Inf(t1, t2, _, _) => Inf(t1.erase, t2.erase, Metadata.none, "")
         case Imp(t1, t2, _) => Imp(t1.erase, t2.erase, Metadata.none)
         case Module(fields, _) => Module(fields.map(_.onTerm(_.erase)), Metadata.none)
         case Interface(fields, _) => Interface(fields.map(_.onTerm(_.erase)), Metadata.none)
@@ -402,10 +403,6 @@ enum Term derives HasMeta {
         case Some(_) => searchFunction(typ, i.tail, all)
         case None => None
 
-    def checkWithSearch(ty: Term, shape: Option[Term], i: I, c: C, g: G) = shape match
-        case None => Result.succeed(this, ty)
-        case Some(value) => resolveAll(this, ty, value, g, i, c)
-
     /** Checks that `ty` conforms to `shape` up to implicit resolution.
       * Uses [[matches]] and [[search]] to synthesize a term such that `ty` matches `shape`. 
       * If `ty` does not match `shape`, but is an implicit function type, then the implicit scope `i` is accessed.
@@ -414,23 +411,9 @@ enum Term derives HasMeta {
       * @param i the implicit scope
       * @return type-checking result
       */
-    // def checkWithSearch(ty: Term, shape: Option[Term], i: I, c: C, g: G): Result[TypeError, (Term, Term)] =
-    //     val res = 
-    //         if ty matches shape 
-    //         then Result.Success(this, shape.getOrElse(ty)) 
-    //         else Result.fail(TypeError.Mismatch(shape.get.revert(c), ty.revert(c), this.meta))
-    //     res.orElse { (ty, shape) match
-    //         case (Imp(t1, t2, _), shape) =>
-    //             search(t1, i) match
-    //                 case None => Result.fail(TypeError.Mismatch(shape.get.revert(c), ty.revert(c), this.meta))
-    //                 case Some(arg) => checkWithSearch(t2, shape, i, c, g).map { (te, ty) => (App(te, arg, this.meta), ty) }
-    //         case _ => Result.fail(TypeError.Mismatch(shape.get.revert(c), ty.revert(c), this.meta))
-    //     }.orElse { shape match
-    //         case Some(shape) if ty.isInstanceOf[Inf] => inferAll(ty, shape, c, g)
-    //         case _ => if ty.isInstanceOf[Inf]
-    //             then Result.fail(TypeError.Message("shape neccessary for infering type", this.meta))
-    //             else Result.fail(TypeError.Mismatch(shape.get.revert(c), ty.revert(c), this.meta))
-    //     }
+    def checkWithSearch(ty: Term, shape: Option[Term], i: I, c: C, g: G) = shape match
+        case None => Result.succeed(this, ty)
+        case Some(value) => resolveAll(this, ty, value, g, i, c)
 
     def searchAll(ty: Term, i: I, c: C): Result[TypeError, (Term, Term)] = ty match
         case Imp(t1, t2, _) => search(t1, i) match
@@ -439,97 +422,54 @@ enum Term derives HasMeta {
             case None => Result.fail(TypeError.NoImplicitFound(Some(t1.revert(c)), this.meta))
         case other => Result.succeed(this, ty)
 
-    // def collectVars(ty: Term): (List[Int], Term) = ty match
-    //     case Inf(t1, t2, r, x) => 
-    //         val (xs, t) = t2.collectVars(t2)
-    //         (0 :: (xs.map(_ + 1)), t)
-    //     case _ => (Nil, ty)
-
-    // def inferAll(ty: Term, shape: Term, c: C, g: G): Result[TypeError, (Term, Term)] =
-    //     // all [x] variables and the typ after them
-    //     val (vars, typ) = collectVars(ty)
-    //     typ.genEq(shape >> (vars.max + 1), Set.empty, vars) match
-    //         case None => 
-    //             Result.fail(TypeError.Mismatch(shape.revert(c), ty.revert(c), this.meta))
-    //         case Some(value) => validateGenEqRes(value) match
-    //             case None => Result.fail(TypeError.Message("failed to match all constraints", this.meta))
-    //             case Some(value) => 
-    //                 val notInferred = vars.filter(v => value.forall(_(0) != v))
-    //                 if notInferred.nonEmpty
-    //                 then Result.fail(TypeError.Message(s"no constraint for $notInferred", this.meta))
-    //                 else Result.succeed(this, shape)
-
-    // def inferPartialForApp(funType: Term, fun: Term, argType: Term, arg: Term, i: I, c: C, g: G, shape: Option[Term]): Result[TypeError, (Term, Term)] = 
-    //     // get variables that could be inferred and the type in which the inference will happen
-    //     val (vars, innerType) = collectVars(funType)
-    //     fun.searchAll(innerType, i, c).flatMap {
-    //         case (abs, Pro(input, output, r, x)) => 
-    //             input.genEq(argType >> (vars.max + 1), Set.empty, vars) match
-    //                 case None => Result.fail(TypeError.Message("failed in inferAll(): genEq returned None", this.meta))
-    //                 case Some(value) => validateGenEqRes(value) match
-    //                     case None => Result.fail(TypeError.Message("failed to match all constraints", this.meta))
-    //                     case Some(inferredVals) => // inference worked :)
-    //                         // we need to reconstruct funType with inferredVals
-    //                         def reconstruct(ty: Term, currentVar: Int): Term = ty match
-    //                             case Inf(t1, t2, r, x) => 
-    //                                 if inferredVals.contains(currentVar) 
-    //                                 then reconstruct(t2.replace(0, inferredVals(currentVar) << currentVar) << 1, currentVar - 1)
-    //                                 else Inf(t1, reconstruct(t2, currentVar - 1), r, x)
-    //                             case Pro(u1, u2, r2, _) => u2.replace(0, arg >> 1) << 1 // shifting not defined
-    //                             case _ => throw new Exception("cant happen!")
-    //                             // println(inferredVals.size)
-    //                             App(abs, arg, this.meta).checkWithSearch(reconstruct(funType, vars.max), shape, i, c, g)
-    //         case e => Result.fail(TypeError.Message(s"product type expected! [[$e]](in partialForApp)", this.meta))
-    //     }
-
     def genEqHelper(that: Term, variables: List[Int]): Option[List[(Int, Term)]] =  (this, that) match
-                case (Var(x, _, _), term) =>
-                    val res = if variables contains x then Some((x, term) :: Nil)
-                              else if term.isInstanceOf[Var] && term.asInstanceOf[Var].x == x then Some(Nil)
-                              else None
-                    // println(res)
-                    res
-                    // Option.when(variables contains x)((x, term) :: Nil)
-                case (Abs(t, _, _), Abs(e, _, _)) =>
-                    t.genEqHelper(e, variables >> 1) << 1
-                case (App(t1, t2, _), App(e1, e2, _)) =>
-                    t1.genEqHelper(e1, variables) && t2.genEqHelper(e2, variables)
-                case (Typ(_), Typ(_)) => Some(Nil)
-                case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
-                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) =>
-                    t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
-                case (Imp(t1, t2, _), Imp(e1, e2, _)) =>
-                    t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
-                case (Inf(t1, t2, _, _), Inf(e1, e2, _, _)) =>
-                    t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
-                case (Module(ts, _), Module(es, _)) =>
-                    (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
-                        case (opt, (ModElem(s1, t1, m1), ModElem(s2, t2, m2))) => 
-                            opt.flatMap { xs => 
-                                (t1.genEqHelper(t2, variables >> 1) << 1).flatMap { ys =>
-                                    Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
-                                }
-                            }
+        case (Var(x, _, _), term) =>
+            val res = if variables contains x then Some((x, term) :: Nil)
+                      else if term.isInstanceOf[Var] && term.asInstanceOf[Var].x == x then Some(Nil)
+                      else None
+            // println(res)
+            res
+            // Option.when(variables contains x)((x, term) :: Nil)
+        case (Abs(t, _, _), Abs(e, _, _)) =>
+            t.genEqHelper(e, variables >> 1) << 1
+        case (App(t1, t2, _), App(e1, e2, _)) =>
+            t1.genEqHelper(e1, variables) && t2.genEqHelper(e2, variables)
+        case (Typ(_), Typ(_)) => Some(Nil)
+        case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
+        case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) =>
+            t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
+        case (Imp(t1, t2, _), Imp(e1, e2, _)) =>
+            t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
+        case (Inf(t1, t2, _, _), Inf(e1, e2, _, _)) =>
+            t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
+        case (Module(ts, _), Module(es, _)) =>
+            (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
+                case (opt, (ModElem(s1, t1, m1), ModElem(s2, t2, m2))) => 
+                    opt.flatMap { xs => 
+                        (t1.genEqHelper(t2, variables >> 1) << 1).flatMap { ys =>
+                            Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
+                        }
                     }
-                case (Interface(ts, _), Interface(es, _)) =>
-                    (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
-                    case (opt, (IntElem(s1, t1, m1), IntElem(s2, t2, m2))) => 
-                            opt.flatMap { xs => 
-                                (t1.genEqHelper(t2, variables >> 1) << 1).flatMap { ys =>
-                                    Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
-                                }
-                            }
+            }
+        case (Interface(ts, _), Interface(es, _)) =>
+            (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
+            case (opt, (IntElem(s1, t1, m1), IntElem(s2, t2, m2))) => 
+                    opt.flatMap { xs => 
+                        (t1.genEqHelper(t2, variables >> 1) << 1).flatMap { ys =>
+                            Option.when(s1 == s2 && m1 == m2)(xs ++ ys)
+                        }
                     }
-                case (As(t1, t2, _), As(e1, e2, _)) => t1.genEqHelper(e1, variables) && t2.genEqHelper(e2, variables)
-                case (Get(t, f1, _), Get(e, f2, _)) => t.genEqHelper(e, variables).filter(_ => f1 == f2)
-                case (NatType(_), NatType(_)) => Some(Nil)
-                case (Nat(v1, _), Nat(v2, _)) => Option.when(v1 == v2)(Nil)
-                case (Succ(t1, _), Succ(t2, _)) => t1.genEqHelper(t2, variables)
-                case (Succ(t1, _), Nat(n, m)) if n > 0 => 
-                    t1.genEqHelper(Nat(n-1, m), variables)
-                case (Debug(t1, _), Debug(t2, _)) => t1.genEqHelper(t2, variables)
-                case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.genEqHelper(t2, variables) && z1.genEqHelper(z2, variables) && (s1.genEqHelper(s2, variables >> 1) << 1)
-                case _ => None
+            }
+        case (As(t1, t2, _), As(e1, e2, _)) => t1.genEqHelper(e1, variables) && t2.genEqHelper(e2, variables)
+        case (Get(t, f1, _), Get(e, f2, _)) => t.genEqHelper(e, variables).filter(_ => f1 == f2)
+        case (NatType(_), NatType(_)) => Some(Nil)
+        case (Nat(v1, _), Nat(v2, _)) => Option.when(v1 == v2)(Nil)
+        case (Succ(t1, _), Succ(t2, _)) => t1.genEqHelper(t2, variables)
+        case (Succ(t1, _), Nat(n, m)) if n > 0 => 
+            t1.genEqHelper(Nat(n-1, m), variables)
+        case (Debug(t1, _), Debug(t2, _)) => t1.genEqHelper(t2, variables)
+        case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.genEqHelper(t2, variables) && z1.genEqHelper(z2, variables) && (s1.genEqHelper(s2, variables >> 1) << 1)
+        case _ => None
 
 
     def genEq(that: Term, relation: R, variables: List[Int]): Option[List[(Int, Term)]] =
@@ -601,7 +541,7 @@ enum Term derives HasMeta {
     def unify(one: Map[Int, Term], two: Map[Int, Term]): Result[TypeError, Map[Int, Term]] = 
         two.foldLeft[Result[TypeError, Map[Int, Term]]](Result.succeed(one)) {
             case (res @ Result.Success(map), (v -> t)) => map.get(v) match
-                case Some(u) => if t === u then res else Result.fail(TypeError.Message("constraints cannot be unified", this.meta))
+                case Some(u) => if t === u then res else Result.fail(TypeError.Message(s"constraints cannot be unified $t and $u", this.meta))
                 case None    => Result.succeed(map + (v -> t))
             case (fail, _) => fail
         }
@@ -613,18 +553,29 @@ enum Term derives HasMeta {
             case Some(result) => validateGenEqRes(result) match
                 case None => Result.fail(TypeError.Message("constraints cannot be unified", this.meta))
                 case Some(constraints) =>
-                    vars.foldLeft[Result[TypeError, Map[Int, Term]]](Result.succeed(constraints)) { 
-                        case (res @ Result.Success(map), v) => reqs(reqs.length - 1 - v) match
-                            case Req.Inf(t) => map.get(v) match
-                                case Some(value) =>
-                                    (value << reqs.length).transform(g, i, c, None).flatMap { (_, typ) =>
-                                        t.genEq(typ >> reqs.length - 1 - v, Set.empty, vars)
-                                         .flatMap(validateGenEqRes)
-                                         .map(cons => unify(map, cons.map((i, t) => (i - (reqs.length - v), t << reqs.length - v))))
-                                         .getOrElse(Result.fail(TypeError.Message("constraints cannot be unified", this.meta)))
-                                    }
-                                case None => res
-                            case Req.Imp(t) => res
+                    //println(s"[DEBUG] $constraints / $vars")
+                    vars.foldLeft[Result[TypeError, Map[Int, Term]]](Result.succeed(constraints)) {
+                        case (res @ Result.Success(map), v) =>
+                            val index = reqs.length - 1 - v // distance from outside to position
+                            //println(s"[DEBUG-into] $res $v")
+                            val a = reqs(index) match
+                                case Req.Inf(t) => map.get(v) match
+                                    case Some(value) => // value is from inside
+                                        // we can shift out because value has no dependence on the other reqs
+                                        (value << reqs.length).transform(g, i, c, None).flatMap { (_, typ) =>
+                                            // typ is now outside
+                                            println(s"[DEBUG] $t, ${typ.>>(index)};; $v / $vars")
+                                            t.genEq(typ >> index, Set.empty, vars.map(_ - v - 1)) // typ moved to the position of t
+                                             .flatMap(validateGenEqRes)
+                                             .map(newMap => 
+                                                //println(("DEBUG", map, newMap))
+                                                unify(map, newMap.map((i, t) => (i + v + 1, t >> v + 1))))
+                                             .getOrElse(Result.fail(TypeError.Message("constraints cannot be unified HEHE", this.meta)))
+                                        }
+                                    case None => res
+                                case Req.Imp(t) => res
+                            //println(s"[DEBUG-ret] $a")
+                            a
                         case (fail, _) => fail
                     }
 
@@ -637,27 +588,31 @@ enum Term derives HasMeta {
             (Req.Imp(t1) :: xs, t)
         case other => (Nil, other)
 
+    def reconstruct(ty: Term, v: Int, map: Map[Int, Term], i: I)
+                   (exit: PartialFunction[Term, Result[TypeError, (Term, Term)]]): Result[TypeError, (Term, Term)] = 
+        println(Color.Magenta(s"[DEBUG] reconstruct $ty, $v, $map, $i"))
+        ty match
+            case Inf(t1, t2, r, x) => 
+                if map.contains(v) then 
+                    println(s"[DEBUG] map($v) = ${map(v)}, t2 = $t2, t2' = ${t2.replace(0, map(v) << v) << 1}")
+                    reconstruct(t2.replace(0, map(v) << v) << 1, v - 1, map.map((i, t) => (i, t << 1)), i)(exit)
+                else reconstruct(t2, v - 1, map, i)(exit).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
+            case Imp(t1, t2, meta) =>
+                search(t1, i).map { imp =>
+                    reconstruct(t2, v - 1, map.map((i, t) => (i, t << 1)), i)(exit).map { (newTe, newTy) => 
+                        (App(newTe, imp, this.meta), newTy)
+                    }
+                }.getOrElse(Result.fail(TypeError.Message(s"No implicit found $t1 in $i", this.meta)))
+            case other => exit(other)
+
     def resolveAll(te: Term, ty: Term, shape: Term, g: G, i: I, c: C): Result[TypeError, (Term, Term)] = 
         println(s"resolveAll($te, $ty, $shape)")
         val (reqs, core) = ty.requirements
         resolve(reqs, core, shape, g, i, c).flatMap { map =>
-            // reconstruct by using map and implicit search
-            def reconstruct(te: Term, ty: Term, v: Int): Result[TypeError, (Term, Term)] = ty match
-                case Inf(t1, t2, r, x) => 
-                    if map.contains(v)
-                    then 
-                        reconstruct(te, t2.replace(0, map(v) << v + 1) << 1, v - 1)
-                    else reconstruct(te, t2, v - 1).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
-                case Imp(t1, t2, meta) =>
-                    search(t1, i).map { imp =>
-                        reconstruct(te, t2, v - 1).map { (newTe, newTy) => 
-                            (App(newTe, imp, this.meta), newTy)
-                        }
-                    }.getOrElse(Result.fail(TypeError.Message(s"No implicit found $t1 in $i", this.meta)))
+            println(Color.Red(s"[DEBUG] reconstructing $ty for shape $shape, with $reqs using $map"))
+            reconstruct(ty, reqs.length - 1, map, i) {
                 case other => Result.succeed(te, other)
-
-            println(s"THIS: $shape --- $ty")
-            reconstruct(te, ty, reqs.length - 1).flatMap { (te, ty) =>
+            }.flatMap { (te, ty) =>
                 if ty === shape
                 then Result.Success(te, shape) 
                 else 
@@ -670,54 +625,28 @@ enum Term derives HasMeta {
         val (reqs, core) = funType.requirements
         core match
             case Pro(in, out, meta, x) =>
-                if in.independentOf(0, reqs.length) 
-                then argument.transform(g, i, c, Some(in)).flatMap { (arg, argType) =>
-                    val map = Map.empty[Int, Term]
-                    def reconstruct(te: Term, ty: Term, v: Int): Result[TypeError, (Term, Term)] = ty match
-                        case Inf(t1, t2, r, x) => 
-                            if map.contains(v)
-                            then reconstruct(te, t2.replace(0, map(v) << v) << 1, v - 1)
-                            else reconstruct(te, t2, v - 1).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
-                        case Imp(t1, t2, meta) =>
-                            search(t1, i).map { imp =>
-                                reconstruct(te, t2, v - 1).map { (newTe, newTy) => 
-                                    (App(newTe, imp, this.meta), newTy)
-                                }
-                            }.getOrElse(Result.fail(TypeError.Message("No implicit found", this.meta)))
-
+                if in.independentOf(0, reqs.length) then 
+                    println("independent!!!")
+                    argument.transform(g, i, c, Some(in)).flatMap { (arg, argType) =>
+                    val te = App(fun, arg, this.meta)
+                    reconstruct(funType, reqs.length - 1, Map.empty, i) {
                         case Pro(u1, u2, r2, _) => Result.succeed(te, u2.replace(0, arg >> 1) << 1)
-                        case _ => throw new Exception("cant happen!")
-
-                    reconstruct(App(fun, arg, this.meta), funType, reqs.length - 1)
+                    }
                 }
                 else argument.transform(g, i, c, None).flatMap { (arg, argType) =>
                         resolve(reqs, in, argType, g, i, c).flatMap { map =>
-
-                            // reconstruct by using map and implicit search
-                            def reconstruct(te: Term, ty: Term, v: Int): Result[TypeError, (Term, Term)] = ty match
-                                case Inf(t1, t2, r, x) => 
-                                    if map.contains(v) 
-                                    then reconstruct(te, t2.replace(0, map(v) << v) << 1, v - 1)
-                                    else reconstruct(te, t2, v - 1).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
-                                case Imp(t1, t2, meta) =>
-                                    search(t1, i).map { imp =>
-                                        reconstruct(te, t2, v - 1).map { (newTe, newTy) => 
-                                            (App(newTe, imp, this.meta), newTy)
-                                        }
-                                    }.getOrElse(Result.fail(TypeError.Message("No implicit found", this.meta)))
-
+                            val te = App(fun, arg, this.meta)
+                            reconstruct(funType, reqs.length - 1, map, i) {
                                 case Pro(u1, u2, r2, _) => Result.succeed(te, u2.replace(0, arg >> 1) << 1)
-                                case _ => throw new Exception("cant happen!")
-
-                            reconstruct(App(fun, arg, this.meta), funType, reqs.length - 1)
+                            }
 
                         }
                     }
             case e => Result.fail(TypeError.Message(s"product type expected! [[$e]](in partialForApp)", this.meta))
 
     def independentOf(a: Int, b: Int): Boolean = this match
-        case Var(x, None, _) => a < x && x < b
-        case Var(x, Some(tag), _) => a < x && x < b && tag.independentOf(a, b)
+        case Var(x, None, _) => x < a || b < x
+        case Var(x, Some(tag), _) => (x < a || b < x) && tag.independentOf(a, b)
         case Abs(t, meta, x) => t.independentOf(a + 1, b + 1)
         case App(t1, t2, meta) => t1.independentOf(a, b) && t2.independentOf(a, b)
         case Typ(meta) => true
@@ -785,8 +714,8 @@ enum Term derives HasMeta {
                         (t.transform((g >> 1) + (0 -> (t1 >> 1)), i >> 1, ctx, Some(t2))).map { (te, t3) =>
                             (Abs(te, r1, y), Pro(t1, t3, r2, x2))
                         }
-                    case Some(other) => Result.fail(TypeError.Unexpected(s"product type", this.meta))
-                    case _ => Result.fail(TypeError.Unexpected("product type", this.meta))
+                    case Some(other) => Result.fail(TypeError.Unexpected(s"product type; found $other", this.meta))
+                    case _ => Result.fail(TypeError.Unexpected("product type LOL", this.meta))
 
                 case App(t1, t2, r1) =>
                     t1.transform(g, i, c, None).flatMap { (te, ty) =>
@@ -928,7 +857,10 @@ enum Term derives HasMeta {
                 case As(te, ty, r) => 
                     ty.transform(g, i, c, Some(Typ(r))).flatMap { (ty, _) =>
                             te.transform(g, i, c, Some(ty)).flatMap { (ue, uy) =>
-                            As(ue, ty, r).checkWithSearch(uy, shape.orElse(Some(ty)), i, c, g)
+                            println(s"HERE!@! $shape")
+                            val res = As(ue, ty, r).checkWithSearch(uy, shape, i, c, g)
+                            println(s"REACHED!! $res")
+                            res
                         }
                     }
 
@@ -1011,6 +943,3 @@ enum Term derives HasMeta {
     def typeCheck(ty: Term) = transform(Map.empty, Map.empty, Map.empty, Some(ty))
 
 }
-
-// { head : Nat, tail : (({ test = (\|imp$| -> 0), ?n = nat(666), v = { head = nat(3), tail = { head = nat(12), tail = { head = nat(1), tail = { head = nat(0), tail = nat(42) } } } }, prep = (\|x| -> (\|m| -> { head = 2, tail = 1 })), tail = (\|m| -> (0.tail)), head = (\|m| -> (0.head)), Vector = (\|x| -> (0 match { Nat, \[k] -> { head : Nat, tail : ((3.Vector) 1) } })) }.Vector) 1     ) }
-// { head : Nat, tail : (({ test = (\|imp$| -> 0), ?n = nat(666), v = { head = nat(3), tail = { head = nat(12), tail = { head = nat(1), tail = { head = nat(0), tail = nat(42) } } } }, prep = (\|x| -> (\|m| -> { head = 2, tail = 1 })), tail = (\|m| -> (0.tail)), head = (\|m| -> (0.head)), Vector = (\|x| -> (0 match { Nat, \[k] -> { head : Nat, tail : ((3.Vector) 1) } })) }.Vector) nat(3)) }

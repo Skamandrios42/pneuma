@@ -17,6 +17,14 @@ object Compiler {
             res     <- term.typeCheck
         yield res
 
+    def apply(code: String) = for
+            program <- PneumaParser(PneumaParser.removeComments(code))
+            term    <- program.convert(Map.empty)
+            res     <- term.typeCheck
+        yield res
+
+    def compile(code: String) = apply(code).get(0)
+
     def compileToJvm(fileName: String) = for
             program <- PneumaParser(PneumaParser.removeComments("{\n" ++ Files.readString(Path.of(fileName)) ++ "\n}.main"))
             term    <- program.convert(Map.empty)

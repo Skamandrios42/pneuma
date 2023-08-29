@@ -20,6 +20,9 @@ object Result {
 enum Result[+E, +A] {
     case Success(value: A)
     case Failure(values: Seq[E])
+    def get: A = this match
+        case Success(value) => value
+        case Failure(values) => throw new NoSuchElementException(s"Failure case: ${values.mkString(", ")} ")
     def map[B](f: A => B): Result[E, B] = this match
         case Success(value) => Success(f(value))
         case Failure(values) => Failure(values)
