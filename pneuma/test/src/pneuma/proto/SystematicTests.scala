@@ -116,4 +116,18 @@ class SystematicTests extends AnyFunSuite with MyTests {
         assert(*.resolveApp(?, nat(42), ty1, Map.empty, Map.empty, Map.empty).log == Result.succeed(? at nat(42), "[A : Type] => { a: A, b: Nat }".pneuma))
     }
 
+    test("test") {
+        val seq = Seq(
+            "First line",
+            "Second line",
+            "Third line",
+            "Fourth line",
+            "Fivth line"
+        )
+        println(Metadata(Some("Test.txt"), 0, 4).mark(seq, 2))
+        println(Metadata(Some("Test.txt"), 6, 9).mark(seq, 2))
+        println(Metadata(Some("Test.txt"), 5, 10).mark(seq, 2))
+        println(Metadata(Some("Test.txt"), 8, 20).mark(seq, 2))
+    }
+
 }

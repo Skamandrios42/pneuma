@@ -473,8 +473,8 @@ enum Term derives HasMeta {
 
 
     def genEq(that: Term, relation: R, variables: List[Int]): Option[List[(Int, Term)]] =
-        println(s"genEq $this === $that with $variables")
-        println(s"     evaluated: ${this.eval} === ${that.eval}")
+        // println(s"genEq $this === $that with $variables")
+        // println(s"     evaluated: ${this.eval} === ${that.eval}")
 
         if relation(this, that) then Some(Nil) else this.genEqHelper(that, variables).orElse {
             // relation with assumed equivalence of this and right
@@ -527,7 +527,7 @@ enum Term derives HasMeta {
                 case (Debug(t1, _), Debug(t2, _)) => t1.genEq(t2, updatedRelation, variables)
                 case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.genEq(t2, updatedRelation, variables) && z1.genEq(z2, updatedRelation, variables) && (s1.genEq(s2, updatedRelation, variables >> 1) << 1)
                 case _ => None
-            if res.isEmpty then println(s"${this.eval.getClass} ${that.eval.getClass}")
+            // if res.isEmpty then println(s"${this.eval.getClass} ${that.eval.getClass}")
             res
         }
 
@@ -564,7 +564,7 @@ enum Term derives HasMeta {
                                         // we can shift out because value has no dependence on the other reqs
                                         (value << reqs.length).transform(g, i, c, None).flatMap { (_, typ) =>
                                             // typ is now outside
-                                            println(s"[DEBUG] $t, ${typ.>>(index)};; $v / $vars")
+                                            // println(s"[DEBUG] $t, ${typ.>>(index)};; $v / $vars")
                                             t.genEq(typ >> index, Set.empty, vars.map(_ - v - 1)) // typ moved to the position of t
                                              .flatMap(validateGenEqRes)
                                              .map(newMap => 
@@ -590,11 +590,11 @@ enum Term derives HasMeta {
 
     def reconstruct(ty: Term, v: Int, map: Map[Int, Term], i: I)
                    (exit: PartialFunction[Term, Result[TypeError, (Term, Term)]]): Result[TypeError, (Term, Term)] = 
-        println(Color.Magenta(s"[DEBUG] reconstruct $ty, $v, $map, $i"))
+        // println(Color.Magenta(s"[DEBUG] reconstruct $ty, $v, $map, $i"))
         ty match
             case Inf(t1, t2, r, x) => 
                 if map.contains(v) then 
-                    println(s"[DEBUG] map($v) = ${map(v)}, t2 = $t2, t2' = ${t2.replace(0, map(v) << v) << 1}")
+                    // println(s"[DEBUG] map($v) = ${map(v)}, t2 = $t2, t2' = ${t2.replace(0, map(v) << v) << 1}")
                     reconstruct(t2.replace(0, map(v) << v) << 1, v - 1, map.map((i, t) => (i, t << 1)), i)(exit)
                 else reconstruct(t2, v - 1, map, i)(exit).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
             case Imp(t1, t2, meta) =>
@@ -606,17 +606,17 @@ enum Term derives HasMeta {
             case other => exit(other)
 
     def resolveAll(te: Term, ty: Term, shape: Term, g: G, i: I, c: C): Result[TypeError, (Term, Term)] = 
-        println(s"resolveAll($te, $ty, $shape)")
+        // println(s"resolveAll($te, $ty, $shape)")
         val (reqs, core) = ty.requirements
         resolve(reqs, core, shape, g, i, c).flatMap { map =>
-            println(Color.Red(s"[DEBUG] reconstructing $ty for shape $shape, with $reqs using $map"))
+            // println(Color.Red(s"[DEBUG] reconstructing $ty for shape $shape, with $reqs using $map"))
             reconstruct(ty, reqs.length - 1, map, i) {
                 case other => Result.succeed(te, other)
             }.flatMap { (te, ty) =>
                 if ty === shape
                 then Result.Success(te, shape) 
                 else 
-                    println(s"THIS: $shape --- $ty")
+                    // println(s"THIS: $shape --- $ty")
                     Result.fail(TypeError.Mismatch(shape.revert(c), ty.revert(c), this.meta))
             }
         }
@@ -626,7 +626,7 @@ enum Term derives HasMeta {
         core match
             case Pro(in, out, meta, x) =>
                 if in.independentOf(0, reqs.length) then 
-                    println("independent!!!")
+                    // println("independent!!!")
                     argument.transform(g, i, c, Some(in)).flatMap { (arg, argType) =>
                     val te = App(fun, arg, this.meta)
                     reconstruct(funType, reqs.length - 1, Map.empty, i) {
@@ -857,9 +857,9 @@ enum Term derives HasMeta {
                 case As(te, ty, r) => 
                     ty.transform(g, i, c, Some(Typ(r))).flatMap { (ty, _) =>
                             te.transform(g, i, c, Some(ty)).flatMap { (ue, uy) =>
-                            println(s"HERE!@! $shape")
+                            // println(s"HERE!@! $shape")
                             val res = As(ue, ty, r).checkWithSearch(uy, shape, i, c, g)
-                            println(s"REACHED!! $res")
+                            // println(s"REACHED!! $res")
                             res
                         }
                     }

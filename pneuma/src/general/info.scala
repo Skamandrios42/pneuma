@@ -30,17 +30,22 @@ case class Metadata(file: Option[String], start: Int, end: Int) {
     def mark(content: Seq[String], indent: Int) = {
         val startPos = Pos.from(start, content)
         val endPos = Pos.from(end, content)
-        val len = (endPos.char - startPos.char)
         if startPos == endPos then
             val line = (" " * indent) ++ content(startPos.line)
             val marker = (" " * (startPos.char + indent)) ++ "^"
             line ++ "\n" ++ marker
         else if startPos.line == endPos.line then 
+            val len = (endPos.char - startPos.char)
             val line = content(startPos.line)
             val marker = (" " * (startPos.char + indent)) ++ ("^" * len)
             val colored = (" " * indent) ++ line.take(startPos.char) ++ Console.RED ++ line.drop(startPos.char).take(len) ++ Console.RESET ++ line.drop(startPos.char + len)
             colored ++ "\n" ++ marker
-        else " ... not implemented ..."
+        else
+            val len = endPos.char + 4
+            val line = "... " ++ content(endPos.line)
+            val marker = (" " * indent) ++ ("^" * len)
+            val colored = (" " * indent) ++ Console.RED ++ line.take(len) ++ Console.RESET ++ line.drop(len)
+            colored ++ "\n" ++ marker
     }
 
     override def toString: String = file match
