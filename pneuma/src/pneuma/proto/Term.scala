@@ -590,8 +590,7 @@ enum Term derives HasMeta {
         val (reqs, core) = funType.requirements
         core match
             case Pro(in, out, meta, x) =>
-                if in.independentOf(0, reqs.length) then 
-                    // println("independent!!!")
+                if in.independentOf(0, reqs.length - 1) then 
                     argument.transform(g, i, c, Some(in)).flatMap { (arg, argType) =>
                     // val te = App(fun, arg, this.meta)
                     val res = reconstruct(fun, funType, reqs.length - 1, Map.empty, i) {
@@ -602,17 +601,16 @@ enum Term derives HasMeta {
 
                 }
                 else argument.transform(g, i, c, None).flatMap { (arg, argType) =>
-                        resolve(reqs, in, argType, g, i, c).flatMap { map =>
-                            // val te = App(fun, arg, this.meta)
-                            println(map)
-                            val res = reconstruct(fun, funType, reqs.length - 1, map, i) {
-                                case (te, Pro(u1, u2, r2, _)) => Result.succeed(App(te, arg, this.meta), u2.replace(0, (As(arg, argType, arg.meta)) >> 1) << 1)
-                            }
-                            println(res)
-                            res
-
+                    resolve(reqs, in, argType, g, i, c).flatMap { map =>
+                        // val te = App(fun, arg, this.meta)
+                        println(map)
+                        val res = reconstruct(fun, funType, reqs.length - 1, map, i) {
+                            case (te, Pro(u1, u2, r2, _)) => Result.succeed(App(te, arg, this.meta), u2.replace(0, (As(arg, argType, arg.meta)) >> 1) << 1)
                         }
+                        println(res)
+                        res
                     }
+                }
             case e => Result.fail(TypeError.Message(s"product type expected! [[$e]](in partialForApp)", this.meta))
 
     def independentOf(a: Int, b: Int): Boolean = this match
@@ -689,7 +687,7 @@ enum Term derives HasMeta {
                     case Some(other) => Result.fail(TypeError.Unexpected(s"product type; found $other", this.meta))
                     case _ => 
                         Result.fail(TypeError.Unexpected("product type LOL", this.meta))
-                        // throw new Exception("BAM")
+                        throw new Exception("BAM")
 
                 case App(t1, t2, r1) =>
                     t1.transform(g, i, c, None).flatMap { (te, ty) =>
