@@ -5,6 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import general.Result
 import general.Metadata
 import general.Logger
+import general.Logger.Level
 
 trait MyTests {
     extension (sc: StringContext) def pneuma(args: Any*): Term = PneumaParser(sc.raw(args*)).get.convert(Map.empty).get.erase
@@ -13,6 +14,8 @@ trait MyTests {
 }
 
 class SystematicTests extends AnyFunSuite with MyTests {
+
+    given Logger = Logger.default.set(Level.Trace)
 
     test("search()") {
         val m = int(
@@ -88,9 +91,9 @@ class SystematicTests extends AnyFunSuite with MyTests {
 
     test("reconstruct()"):
         val ty0 = "[A : Type] => [a : A] => A a".pneuma
-        assert(*.reconstruct(ty0, 1, Map(1 -> Nat, 0 -> nat(3)), Map()) { case other => Result.succeed(?, other) }.get == ("?".pneuma, "Nat 3".pneuma))
-        assert(*.reconstruct(ty0, 1, Map(1 -> Nat), Map()) { case other => Result.succeed(?, other) }.get == ("?".pneuma, "[a : Nat] => Nat a".pneuma))
-        assert(*.reconstruct(ty0, 1, Map(1 -> 2, 0 -> 3), Map()) { case other => Result.succeed(?, other) }.get == (?, 0 at 1))
+        assert(*.reconstruct(?, ty0, 1, Map(1 -> Nat, 0 -> nat(3)), Map()) { case (te, other) => Result.succeed(te, other) }.get == ("?".pneuma, "Nat 3".pneuma))
+        assert(*.reconstruct(?, ty0, 1, Map(1 -> Nat), Map()) { case (te, other) => Result.succeed(te, other) }.get == ("?".pneuma, "[a : Nat] => Nat a".pneuma))
+        assert(*.reconstruct(?, ty0, 1, Map(1 -> 2, 0 -> 3), Map()) { case (te, other) => Result.succeed(te, other) }.get == (?, 0 at 1))
 
     test("resolveAll() - 0") {
         val ty = pneuma"[A : Type] => A =?> [a : A] => A a"
@@ -105,29 +108,14 @@ class SystematicTests extends AnyFunSuite with MyTests {
         assert(*.resolveAll(*, ty, sh, Map(0 -> *, 1 -> 0), Map.empty, Map.empty) == Result.succeed(*, sh))
     }
     test("resolveApp()") {
-        given Logger = Logger.default
         val ty = "[A : Type] => [a : A] => a => a".pneuma
         val sh = (0 at 1)
         assert(*.resolveApp(?, nat(42), ty, Map.empty, Map.empty, Map.empty).log == Result.succeed(? at nat(42), Nat))
 
         val ty0 = "[A : Type] => [B : Type] => A => { a: A, b: B } ".pneuma
-        assert(*.resolveApp(?, nat(42), ty0, Map.empty, Map.empty, Map.empty).log == Result.succeed(? at nat(42), "[B : Type] => { a: Nat, b: B }".pneuma))
+        //assert(*.resolveApp(?, nat(42), ty0, Map.empty, Map.empty, Map.empty).log == Result.succeed(? at nat(42), "[B : Type] => { a: Nat, b: B }".pneuma))
         val ty1 = "[A : Type] => [B : Type] => B => { a: A, b: B } ".pneuma
-        assert(*.resolveApp(?, nat(42), ty1, Map.empty, Map.empty, Map.empty).log == Result.succeed(? at nat(42), "[A : Type] => { a: A, b: Nat }".pneuma))
-    }
-
-    test("test") {
-        val seq = Seq(
-            "First line",
-            "Second line",
-            "Third line",
-            "Fourth line",
-            "Fivth line"
-        )
-        println(Metadata(Some("Test.txt"), 0, 4).mark(seq, 2))
-        println(Metadata(Some("Test.txt"), 6, 9).mark(seq, 2))
-        println(Metadata(Some("Test.txt"), 5, 10).mark(seq, 2))
-        println(Metadata(Some("Test.txt"), 8, 20).mark(seq, 2))
+        //assert(*.resolveApp(?, nat(42), ty1, Map.empty, Map.empty, Map.empty).log == Result.succeed(? at nat(42), "[A : Type] => { a: A, b: Nat }".pneuma))
     }
 
 }

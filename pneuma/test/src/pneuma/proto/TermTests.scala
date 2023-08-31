@@ -5,8 +5,11 @@ import org.scalatest.funsuite.AnyFunSuite
 import DSL.{*, given}
 import general.Result
 import scala.util.Try
+import general.Logger
 
 class TermTests extends AnyFunSuite {
+
+    given Logger = Logger.default
 
     extension (self: Result[TypeError, (Term, Term)]) def untag = self.map((x, y) => (x.untag.erase, y.untag.erase))
 

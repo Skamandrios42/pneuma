@@ -6,8 +6,10 @@ import java.nio.file.Path
 import general.Result
 import scala.collection.immutable.ArraySeq
 import general.Metadata
+import general.Logger
 
 class ParserTests extends AnyFunSuite {
+    given Logger = Logger.default
     test("parsing") {
         val source =
             """{ a = \x -> x, b = \x -> x, ?c = Nat } : { a : (x: Nat) => Nat, b : (x: Type) => Type, ?c : Type }"""

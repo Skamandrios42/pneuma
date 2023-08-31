@@ -4,6 +4,8 @@ import scala.annotation.targetName
 import Term.{IntElem, ModElem, Mode, Req}
 import general.{Result, Metadata, HasMeta}
 import fansi.Color
+import general.Logger
+import general.Logger.Level
 
 object Term {
     enum Mode { case Exp, Imp }
@@ -352,16 +354,6 @@ enum Term derives HasMeta {
                 case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.equivalence(t2, updatedRelation) && z1.equivalence(z2, updatedRelation) && s1.equivalence(s2, updatedRelation)
                 case _ => false
 
-    /** checks, if this (seen as a type) conforms to the expected shape using [[===]]
-      * @param shape optional type
-      * @return `this === shape.get`, if shape is defined or else true
-      */
-    def matches(shape: Option[Term]): Boolean = 
-        //println(s"DEBUG: $this should match $shape")
-        shape match
-            case Some(value) => this === value
-            case None => true
-
     extension (self: Option[List[(Int, Term)]]) {
         def &&(that: Option[List[(Int, Term)]]) = for
             a <- self
@@ -390,15 +382,16 @@ enum Term derives HasMeta {
       * @param all the complete implicit scope
       * @return the synthesized term of type `typ`
       */
-    def search(typ: Term, i: I): Option[Term] = 
+    def search(typ: Term, i: I)(using Logger): Option[Term] = 
+        Logger.log(s"search implicit scope for $typ", Level.Trace)
         searchDirect(typ, i, i).orElse(searchFunction(typ, i, i))
 
-    def searchDirect(typ: Term, i: I, all: I): Option[Term] = i.headOption match
+    def searchDirect(typ: Term, i: I, all: I)(using Logger): Option[Term] = i.headOption match
         case Some(imp, index) if imp === typ => Some(index)
         case Some(_) => searchDirect(typ, i.tail, all)
         case None => None
 
-    def searchFunction(typ: Term, i: I, all: I): Option[Term] = i.headOption match
+    def searchFunction(typ: Term, i: I, all: I)(using Logger): Option[Term] = i.headOption match
         case Some((Imp(t1, t2, _), i)) if t2 === (typ >> 1) => search(t1, all).map { arg => App(i, arg, this.meta) }
         case Some(_) => searchFunction(typ, i.tail, all)
         case None => None
@@ -411,37 +404,31 @@ enum Term derives HasMeta {
       * @param i the implicit scope
       * @return type-checking result
       */
-    def checkWithSearch(ty: Term, shape: Option[Term], i: I, c: C, g: G) = shape match
+    def checkWithSearch(ty: Term, shape: Option[Term], i: I, c: C, g: G)(using Logger) = shape match
         case None => Result.succeed(this, ty)
         case Some(value) => resolveAll(this, ty, value, g, i, c)
 
-    def searchAll(ty: Term, i: I, c: C): Result[TypeError, (Term, Term)] = ty match
-        case Imp(t1, t2, _) => search(t1, i) match
-            case Some(value) =>
-                this.searchAll(t2, i, c).map { (thi, thy) => (App(thi, value, this.meta), thy) }
-            case None => Result.fail(TypeError.NoImplicitFound(Some(t1.revert(c)), this.meta))
-        case other => Result.succeed(this, ty)
+    def searchAll(ty: Term, i: I, c: C)(using Logger): Result[TypeError, (Term, Term)] = 
+        Logger.log(s"search for all implicits in $ty", Level.Trace)
+        ty match
+            case Imp(t1, t2, _) => search(t1, i) match
+                case Some(value) =>
+                    this.searchAll(t2, i, c).map { (thi, thy) => (App(thi, value, this.meta), thy) }
+                case None => Result.fail(TypeError.NoImplicitFound(Some(t1.revert(c)), this.meta))
+            case other => Result.succeed(this, ty)
 
-    def genEqHelper(that: Term, variables: List[Int]): Option[List[(Int, Term)]] =  (this, that) match
+    def genEqHelper(that: Term, variables: List[Int])(using Logger): Option[List[(Int, Term)]] =  (this, that) match
         case (Var(x, _, _), term) =>
-            val res = if variables contains x then Some((x, term) :: Nil)
-                      else if term.isInstanceOf[Var] && term.asInstanceOf[Var].x == x then Some(Nil)
-                      else None
-            // println(res)
-            res
-            // Option.when(variables contains x)((x, term) :: Nil)
-        case (Abs(t, _, _), Abs(e, _, _)) =>
-            t.genEqHelper(e, variables >> 1) << 1
-        case (App(t1, t2, _), App(e1, e2, _)) =>
-            t1.genEqHelper(e1, variables) && t2.genEqHelper(e2, variables)
+            if variables contains x then Some((x, term) :: Nil)
+            else if term.isInstanceOf[Var] && term.asInstanceOf[Var].x == x then Some(Nil)
+            else None
+        case (Abs(t, _, _), Abs(e, _, _)) =>t.genEqHelper(e, variables >> 1) << 1
+        case (App(t1, t2, _), App(e1, e2, _)) =>t1.genEqHelper(e1, variables) && t2.genEqHelper(e2, variables)
         case (Typ(_), Typ(_)) => Some(Nil)
         case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
-        case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) =>
-            t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
-        case (Imp(t1, t2, _), Imp(e1, e2, _)) =>
-            t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
-        case (Inf(t1, t2, _, _), Inf(e1, e2, _, _)) =>
-            t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
+        case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) =>t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
+        case (Imp(t1, t2, _), Imp(e1, e2, _)) =>t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
+        case (Inf(t1, t2, _, _), Inf(e1, e2, _, _)) =>t1.genEqHelper(e1, variables) && (t2.genEqHelper(e2, variables >> 1) << 1)
         case (Module(ts, _), Module(es, _)) =>
             (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
                 case (opt, (ModElem(s1, t1, m1), ModElem(s2, t2, m2))) => 
@@ -465,40 +452,28 @@ enum Term derives HasMeta {
         case (NatType(_), NatType(_)) => Some(Nil)
         case (Nat(v1, _), Nat(v2, _)) => Option.when(v1 == v2)(Nil)
         case (Succ(t1, _), Succ(t2, _)) => t1.genEqHelper(t2, variables)
-        case (Succ(t1, _), Nat(n, m)) if n > 0 => 
-            t1.genEqHelper(Nat(n-1, m), variables)
+        case (Succ(t1, _), Nat(n, m)) if n > 0 => t1.genEqHelper(Nat(n-1, m), variables)
         case (Debug(t1, _), Debug(t2, _)) => t1.genEqHelper(t2, variables)
         case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.genEqHelper(t2, variables) && z1.genEqHelper(z2, variables) && (s1.genEqHelper(s2, variables >> 1) << 1)
         case _ => None
 
 
-    def genEq(that: Term, relation: R, variables: List[Int]): Option[List[(Int, Term)]] =
-        // println(s"genEq $this === $that with $variables")
-        // println(s"     evaluated: ${this.eval} === ${that.eval}")
-
+    def genEq(that: Term, relation: R, variables: List[Int])(using Logger): Option[List[(Int, Term)]] =
+        Logger.log(s"generating equality: $this === $that ${if variables.nonEmpty then variables.mkString("using", ", ", "") else ""}", Level.Trace)
         if relation(this, that) then Some(Nil) else this.genEqHelper(that, variables).orElse {
-            // relation with assumed equivalence of this and right
             def updatedRelation = relation + ((this, that))
-            val res = (this.eval, that.eval) match
+            (this.eval, that.eval) match
                 case (Var(x, _, _), term) =>
-                    val res = if variables contains x then Some((x, term) :: Nil)
-                              else if term.isInstanceOf[Var] && term.asInstanceOf[Var].x == x then Some(Nil)
-                              else None
-                    // println(res)
-                    res
-                    // Option.when(variables contains x)((x, term) :: Nil)
-                case (Abs(t, _, _), Abs(e, _, _)) =>
-                    t.genEq(e, updatedRelation, variables >> 1) << 1
-                case (App(t1, t2, _), App(e1, e2, _)) =>
-                    t1.genEq(e1, updatedRelation, variables) && t2.genEq(e2, updatedRelation, variables)
+                    if variables contains x then Some((x, term) :: Nil)
+                    else if term.isInstanceOf[Var] && term.asInstanceOf[Var].x == x then Some(Nil)
+                    else None
+                case (Abs(t, _, _), Abs(e, _, _)) => t.genEq(e, updatedRelation, variables >> 1) << 1
+                case (App(t1, t2, _), App(e1, e2, _)) => t1.genEq(e1, updatedRelation, variables) && t2.genEq(e2, updatedRelation, variables)
                 case (Typ(_), Typ(_)) => Some(Nil)
                 case (Phi(_), Phi(_)) => throw new Exception("equivalence should only be called after implicit resolution")
-                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) =>
-                    t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
-                case (Imp(t1, t2, _), Imp(e1, e2, _)) =>
-                    t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
-                case (Inf(t1, t2, _, _), Inf(e1, e2, _, _)) =>
-                    t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Pro(t1, t2, _, _), Pro(e1, e2, _, _)) => t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Imp(t1, t2, _), Imp(e1, e2, _)) => t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
+                case (Inf(t1, t2, _, _), Inf(e1, e2, _, _)) => t1.genEq(e1, updatedRelation, variables) && (t2.genEq(e2, updatedRelation, variables >> 1) << 1)
                 case (Module(ts, _), Module(es, _)) =>
                     (ts zip es).foldLeft(Option(List.empty[(Int, Term)])) {
                         case (opt, (ModElem(s1, t1, m1), ModElem(s2, t2, m2))) => 
@@ -522,21 +497,18 @@ enum Term derives HasMeta {
                 case (NatType(_), NatType(_)) => Some(Nil)
                 case (Nat(v1, _), Nat(v2, _)) => Option.when(v1 == v2)(Nil)
                 case (Succ(t1, _), Succ(t2, _)) => t1.genEq(t2, updatedRelation, variables)
-                case (Succ(t1, _), Nat(n, m)) if n > 0 => 
-                    t1.genEq(Nat(n-1, m), updatedRelation, variables)
+                case (Succ(t1, _), Nat(n, m)) if n > 0 => t1.genEq(Nat(n-1, m), updatedRelation, variables)
                 case (Debug(t1, _), Debug(t2, _)) => t1.genEq(t2, updatedRelation, variables)
                 case (Match(t1, z1, s1, _, _), Match(t2, z2, s2, _, _)) => t1.genEq(t2, updatedRelation, variables) && z1.genEq(z2, updatedRelation, variables) && (s1.genEq(s2, updatedRelation, variables >> 1) << 1)
                 case _ => None
-            // if res.isEmpty then println(s"${this.eval.getClass} ${that.eval.getClass}")
-            res
         }
 
     def validateGenEqRes(res: List[(Int, Term)]) = 
-            val map = res.groupBy(_(0))
-            if map.forall { 
-                case (i, (_, x) :: xs) => xs.forall(_(1) === x)
-                case (i, _) => true // can't happen
-            } then Some(map.map(_(1).head)) else None
+        val map = res.groupBy(_(0))
+        if map.forall { 
+            case (i, (_, x) :: xs) => xs.forall(_(1) === x)
+            case (i, _) => true // can't happen
+        } then Some(map.map(_(1).head)) else None
 
     def unify(one: Map[Int, Term], two: Map[Int, Term]): Result[TypeError, Map[Int, Term]] = 
         two.foldLeft[Result[TypeError, Map[Int, Term]]](Result.succeed(one)) {
@@ -546,36 +518,30 @@ enum Term derives HasMeta {
             case (fail, _) => fail
         }
 
-    def resolve(reqs: List[Req], t: Term, u: Term, g: G, i: I, c: C): Result[TypeError, Map[Int, Term]] =
+    def resolve(reqs: List[Req], t: Term, u: Term, g: G, i: I, c: C)(using Logger): Result[TypeError, Map[Int, Term]] =
+        Logger.log(s"resolve $t, $u for ${reqs.mkString(", ")}")
         val vars = List.range(0, reqs.length).filter(i => reqs(reqs.length - 1 - i).isInstanceOf[Req.Inf])
         t.genEq(u >> reqs.length, Set.empty, vars) match
             case None => Result.fail(TypeError.Message(s"$t and ${u >> reqs.length} are unequal in resolve(reqs, t, u)", this.meta))
             case Some(result) => validateGenEqRes(result) match
                 case None => Result.fail(TypeError.Message("constraints cannot be unified", this.meta))
                 case Some(constraints) =>
-                    //println(s"[DEBUG] $constraints / $vars")
                     vars.foldLeft[Result[TypeError, Map[Int, Term]]](Result.succeed(constraints)) {
                         case (res @ Result.Success(map), v) =>
                             val index = reqs.length - 1 - v // distance from outside to position
-                            //println(s"[DEBUG-into] $res $v")
-                            val a = reqs(index) match
-                                case Req.Inf(t) => map.get(v) match
+                            reqs(index) match
+                                case Req.Inf(reqTy) => map.get(v) match
                                     case Some(value) => // value is from inside
                                         // we can shift out because value has no dependence on the other reqs
                                         (value << reqs.length).transform(g, i, c, None).flatMap { (_, typ) =>
                                             // typ is now outside
-                                            // println(s"[DEBUG] $t, ${typ.>>(index)};; $v / $vars")
-                                            t.genEq(typ >> index, Set.empty, vars.map(_ - v - 1)) // typ moved to the position of t
-                                             .flatMap(validateGenEqRes)
-                                             .map(newMap => 
-                                                //println(("DEBUG", map, newMap))
-                                                unify(map, newMap.map((i, t) => (i + v + 1, t >> v + 1))))
-                                             .getOrElse(Result.fail(TypeError.Message("constraints cannot be unified HEHE", this.meta)))
+                                            reqTy.genEq(typ >> index, Set.empty, vars.map(_ - v - 1)) // typ moved to the position of t
+                                                .flatMap(validateGenEqRes)
+                                                .map(newMap => unify(map, newMap.map((i, t) => (i + v + 1, t >> v + 1))))
+                                                .getOrElse(Result.fail(TypeError.Message("constraints cannot be unified HEHE", this.meta)))
                                         }
                                     case None => res
                                 case Req.Imp(t) => res
-                            //println(s"[DEBUG-ret] $a")
-                            a
                         case (fail, _) => fail
                     }
 
@@ -588,57 +554,62 @@ enum Term derives HasMeta {
             (Req.Imp(t1) :: xs, t)
         case other => (Nil, other)
 
-    def reconstruct(ty: Term, v: Int, map: Map[Int, Term], i: I)
-                   (exit: PartialFunction[Term, Result[TypeError, (Term, Term)]]): Result[TypeError, (Term, Term)] = 
-        // println(Color.Magenta(s"[DEBUG] reconstruct $ty, $v, $map, $i"))
+    def reconstruct(te: Term, ty: Term, v: Int, map: Map[Int, Term], i: I)
+                   (exit: PartialFunction[(Term,Term), Result[TypeError, (Term, Term)]])(using Logger): Result[TypeError, (Term, Term)] = 
+        Logger.log(s"reconstruct $ty, $v, ${map.map((i, t) => s"$i -> ...").mkString(", ")}, $i", Level.Trace)
         ty match
             case Inf(t1, t2, r, x) => 
                 if map.contains(v) then 
                     // println(s"[DEBUG] map($v) = ${map(v)}, t2 = $t2, t2' = ${t2.replace(0, map(v) << v) << 1}")
-                    reconstruct(t2.replace(0, map(v) << v) << 1, v - 1, map.map((i, t) => (i, t << 1)), i)(exit)
-                else reconstruct(t2, v - 1, map, i)(exit).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
+                    reconstruct(te, t2.replace(0, map(v) << v) << 1, v - 1, map.map((i, t) => (i, t << 1)), i)(exit)
+                else reconstruct(te, t2, v - 1, map, i)(exit).map { (newTe, newTy) => (newTe, Inf(t1, newTy, r, x)) }
             case Imp(t1, t2, meta) =>
                 search(t1, i).map { imp =>
-                    reconstruct(t2, v - 1, map.map((i, t) => (i, t << 1)), i)(exit).map { (newTe, newTy) => 
-                        (App(newTe, imp, this.meta), newTy)
-                    }
+                    reconstruct(App(te, imp, this.meta), t2, v - 1, map.map((i, t) => (i, t << 1)), i)(exit)
+                    // .map { (newTe, newTy) => 
+                    //     (App(newTe, imp, this.meta), newTy)
+                    // }
                 }.getOrElse(Result.fail(TypeError.Message(s"No implicit found $t1 in $i", this.meta)))
-            case other => exit(other)
+            case other => exit(te, other)
 
-    def resolveAll(te: Term, ty: Term, shape: Term, g: G, i: I, c: C): Result[TypeError, (Term, Term)] = 
-        // println(s"resolveAll($te, $ty, $shape)")
+    def resolveAll(te: Term, ty: Term, shape: Term, g: G, i: I, c: C)(using Logger): Result[TypeError, (Term, Term)] = 
+        Logger.log(s"resolveAll $te, $ty, $shape")
         val (reqs, core) = ty.requirements
         resolve(reqs, core, shape, g, i, c).flatMap { map =>
-            // println(Color.Red(s"[DEBUG] reconstructing $ty for shape $shape, with $reqs using $map"))
-            reconstruct(ty, reqs.length - 1, map, i) {
-                case other => Result.succeed(te, other)
+            reconstruct(te, ty, reqs.length - 1, map, i) {
+                case (te, other) => Result.succeed(te, other)
             }.flatMap { (te, ty) =>
                 if ty === shape
                 then Result.Success(te, shape) 
-                else 
-                    // println(s"THIS: $shape --- $ty")
-                    Result.fail(TypeError.Mismatch(shape.revert(c), ty.revert(c), this.meta))
+                else Result.fail(TypeError.Mismatch(shape.revert(c), ty.revert(c), this.meta))
             }
         }
 
-    def resolveApp(fun: Term, argument: Term, funType: Term, g: G, i: I, c: C): Result[TypeError, (Term, Term)] =
+    def resolveApp(fun: Term, argument: Term, funType: Term, g: G, i: I, c: C)(using Logger): Result[TypeError, (Term, Term)] =
+        Logger.log(s"resolveApp -- function = $fun: $funType, arg = $argument")
         val (reqs, core) = funType.requirements
         core match
             case Pro(in, out, meta, x) =>
                 if in.independentOf(0, reqs.length) then 
                     // println("independent!!!")
                     argument.transform(g, i, c, Some(in)).flatMap { (arg, argType) =>
-                    val te = App(fun, arg, this.meta)
-                    reconstruct(funType, reqs.length - 1, Map.empty, i) {
-                        case Pro(u1, u2, r2, _) => Result.succeed(te, u2.replace(0, arg >> 1) << 1)
+                    // val te = App(fun, arg, this.meta)
+                    val res = reconstruct(fun, funType, reqs.length - 1, Map.empty, i) {
+                        case (te, Pro(u1, u2, r2, _)) => Result.succeed(App(te, arg, this.meta), u2.replace(0, (As(arg, argType, arg.meta)) >> 1) << 1)
                     }
+                    println(res)
+                    res
+
                 }
                 else argument.transform(g, i, c, None).flatMap { (arg, argType) =>
                         resolve(reqs, in, argType, g, i, c).flatMap { map =>
-                            val te = App(fun, arg, this.meta)
-                            reconstruct(funType, reqs.length - 1, map, i) {
-                                case Pro(u1, u2, r2, _) => Result.succeed(te, u2.replace(0, arg >> 1) << 1)
+                            // val te = App(fun, arg, this.meta)
+                            println(map)
+                            val res = reconstruct(fun, funType, reqs.length - 1, map, i) {
+                                case (te, Pro(u1, u2, r2, _)) => Result.succeed(App(te, arg, this.meta), u2.replace(0, (As(arg, argType, arg.meta)) >> 1) << 1)
                             }
+                            println(res)
+                            res
 
                         }
                     }
@@ -670,7 +641,8 @@ enum Term derives HasMeta {
       * @param shape expected shape of the type
       * @return either term and type with resolved implicits or an error message
       */
-    def transform(g: G, i: I, c: C, shape: Option[Term]): Result[TypeError, (Term, Term)] =
+    def transform(g: G, i: I, c: C, shape: Option[Term])(using Logger): Result[TypeError, (Term, Term)] =
+        Logger.log(s"type checking $this ${shape.map("with shape " + _).getOrElse("")}")
         // typecheck and transform the shape MOVED TO CALL SITE
         // if this.isInstanceOf[Typ] && shape.exists(_.isInstanceOf[Typ]) then Result.Success(Typ(this.meta), Typ(this.meta))
         // else shape.map(_.transform(g, i, c, Some(Typ(this.meta)))
@@ -715,115 +687,16 @@ enum Term derives HasMeta {
                             (Abs(te, r1, y), Pro(t1, t3, r2, x2))
                         }
                     case Some(other) => Result.fail(TypeError.Unexpected(s"product type; found $other", this.meta))
-                    case _ => Result.fail(TypeError.Unexpected("product type LOL", this.meta))
+                    case _ => 
+                        Result.fail(TypeError.Unexpected("product type LOL", this.meta))
+                        // throw new Exception("BAM")
 
                 case App(t1, t2, r1) =>
                     t1.transform(g, i, c, None).flatMap { (te, ty) =>
                         resolveApp(te, t2, ty, g, i, c).flatMap { (resTe, resTy) =>
                             resTe.checkWithSearch(resTy, shape, i, c, g)
                         }
-                        // te.searchAll(ty, i, c).flatMap {
-                        //     case (abs, Pro(u1, u2, r2, _)) =>
-                        //         t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
-                        //             App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c, g)
-                        //         }
-                        //     case (abs, typ) => 
-                        //         t2.transform(g, i, c, None).flatMap { (t2te, t2ty) =>
-                        //             resolveApp(abs, t2te, typ, t2ty, g, i, c).flatMap { (resTe, resTy) =>
-                        //                 resTe.checkWithSearch(resTy, shape, i, c, g)
-                        //             }
-                        //         }
-                        // }
                     }
-
-                // SOMEWHERE MISSING SHIFT
-                // case App(t1, t2, meta) => t1.transform(g, i, c, None).flatMap { (te, ty) =>
-                //     resolveApp(t1, t2, ty, ???, g, i, c)
-
-                // }
-
-                // case App(t1, t2, r1) => 
-                //     t1.transform(g, i, c, None).flatMap { (te, ty) =>
-                //         if ty.isInstanceOf[Inf] then
-                //             t2.transform(g, i, c, None).flatMap { (t2te, t2ty) =>
-                //                 inferPartialForApp(ty, te, t2ty, t2te, i, c, g, shape)
-                //             }
-                //         else
-                //             te.searchAll(ty, i, c).flatMap {
-                //             case (abs, Pro(u1, u2, r2, _)) =>
-                //                 t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
-                //                     App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c, g)
-                //                 }
-                //             case (_, _) => Result.fail(TypeError.Unexpected("product type", this.meta))
-                //         }
-                //     }
-
-                // case App(t1, t2, r1) => shape match
-                //     case None =>
-                //         t1.transform(g, i, c, None).flatMap { (te, ty) =>
-                //         }
-                //     case Some(shape) => ???
-
-                // case App(t1, t2, r1) =>
-                //     // typecheck t1
-                //     t1.transform(g, i, c, None).flatMap { (te, ty) =>
-                //         // resolve implicits
-                //         te.searchAll(ty.eval, i, c).flatMap {
-                //             // no inference necessary
-                //             case (abs, Pro(u1, u2, r2, _)) =>
-                //                 t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
-                //                     App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
-                //                 }
-                //             // inference necessary
-                //             case (abs, inf: Inf) =>
-                //                 // typecheck t2
-                //                 t2.transform(g, i, c, None).flatMap { (t2te, t2ty) =>
-                //                         val (vars, innerType) = collectVars(inf)
-                //                         innerType.eval match
-                //                             case Pro(u1, u2, r, x) => 
-                //                                 u1.genEq(t2ty, Set.empty, vars).flatMap(validateGenEqRes) match
-                //                                     case Some(value) => 
-                //                                         val returnType = value.foldLeft(u2) {
-                //                                             case (target, (v, te)) => target.replace(v, te)
-                //                                         }
-                //                                         App(abs, t2te, r1).checkWithSearch((returnType.replace(0, t2te >> 1) << 1), shape, i, c)
-
-                //                                     case None => Result.fail(TypeError.Message("failed sadly :(", this.meta))
-                //                             case _ => Result.fail(TypeError.Unexpected("product type (during inference)", this.meta))
-
-                //                     // case Some(value) =>
-                //                     //     // resolve implicits
-                //                     //     abs.inferAll(inf, Pro(t2ty, value, this.meta, ""), c).flatMap { (_, _) =>
-                //                     //         App(abs, t2te, r1).checkWithSearch((value.replace(0, t2te >> 1) << 1), shape, i, c)
-                //                     //     }
-
-                //                 }
-                //             case (_, _) => Result.fail(TypeError.Unexpected("product type", this.meta))
-                //         }
-                //     }
-
-                // case App(t1, t2, r1) =>
-                //     // typecheck t1
-                //     t1.transform(g, i, c, None).flatMap { (te, ty) =>
-                //         if ty.isInstanceOf[Inf] then
-                //             // typecheck t2
-                //             t2.transform(g, i, c, None).flatMap { (t2te, t2ty) =>
-                //                 if shape.isDefined then
-                //                     te.inferAll(ty, Pro(t2ty, shape.get, this.meta, ""), c)
-                //                 else ???
-                //                 App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
-                //             }
-                //             // inferAll()
-                //         else
-                //             te.searchAll(ty, i, c).flatMap {
-                //                 case (abs, Pro(u1, u2, r2, _)) =>
-                //                     t2.transform(g, i, c, Some(u1)).flatMap { (t2te, t2ty) =>
-                //                         App(abs, t2te, r1).checkWithSearch((u2.replace(0, t2te >> 1) << 1), shape, i, c)
-                //                     }
-                //                 case (_, _) => Result.fail(TypeError.Unexpected("product type", this.meta))
-                //             }
-                //     }
-
 
                 // parameter and result should be a type
                 case Pro(t1, t2, r1, x) =>
@@ -903,43 +776,49 @@ enum Term derives HasMeta {
                 }
 
     /** helper of [[transform]] for checking modules with expected interface */
-    def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, i: I, c: C): Result[TypeError, (Module, Interface)] = fields match
-        case Nil => Result.Success(Module(module.reverse, this.meta), Interface(interface.reverse, this.meta))
-        case (ModElem(name, term, mode), IntElem(name1, typ, mode1)) :: next if name == name1 && mode == mode1 => 
-            val expContext = (g >> 1) + (0 -> (Interface(interface ++ fields.map(_(1)), this.meta) >> 1))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.meta), name, this.meta)) }.toMap.tag(0, Module(module, this.meta) >> 1)
-            val taggedTerm = term.tag(0, Module(module, this.meta) >> 1)
-            val taggedType = typ.tag(0, Module(module, this.meta) >> 1)
-            taggedTerm.transform(expContext, impContext, put(c, "this")(1), Some(taggedType)).flatMap { (te, ty) =>
-                checkModuleWithInterface(next, ModElem(name, te, mode) :: module, IntElem(name, typ, mode) :: interface, g, i, c)
-            }
-        case (ModElem(_, _, teMode), IntElem(_, _, tyMode)) :: _ => Result.fail(TypeError.Message(s"found $teMode for $tyMode", this.meta))
+    def checkModuleWithInterface(fields: List[(ModElem, IntElem)], module: List[ModElem], interface: List[IntElem], g: G, i: I, c: C)(using Logger): Result[TypeError, (Module, Interface)] = 
+        Logger.log(s"check module with interface -- $fields, $module, $interface", Level.Trace)
+        fields match
+            case Nil => Result.Success(Module(module.reverse, this.meta), Interface(interface.reverse, this.meta))
+            case (ModElem(name, term, mode), IntElem(name1, typ, mode1)) :: next if name == name1 && mode == mode1 => 
+                val expContext = (g >> 1) + (0 -> (Interface(interface ++ fields.map(_(1)), this.meta) >> 1))
+                val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.meta), name, this.meta)) }.toMap.tag(0, Module(module, this.meta) >> 1)
+                val taggedTerm = term.tag(0, Module(module, this.meta) >> 1)
+                val taggedType = typ.tag(0, Module(module, this.meta) >> 1)
+                taggedTerm.transform(expContext, impContext, put(c, "this")(1), Some(taggedType)).flatMap { (te, ty) =>
+                    checkModuleWithInterface(next, ModElem(name, te, mode) :: module, IntElem(name, typ, mode) :: interface, g, i, c)
+                }
+            case (ModElem(_, _, teMode), IntElem(_, _, tyMode)) :: _ => Result.fail(TypeError.Message(s"found $teMode for $tyMode", this.meta))
     
     /** helper of [[transform]] for checking modules without expected interface */
-    def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I, c: C): Result[TypeError, (Module, Interface)] = fields match
-        case Nil => Result.Success(Module(module.reverse, this.meta), Interface(interface.reverse, this.meta))
-        case ModElem(name, term, mode) :: next => 
-            val expContext = (g >> 1) + (0 -> (Interface(interface, this.meta) >> 1))
-            val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.meta), name, this.meta)) }.toMap.tag(0, Module(module, this.meta) >> 1)
-            val taggedTerm = term.tag(0, Module(module, this.meta) >> 1)
-            taggedTerm.transform(expContext, impContext, put(c, "this")(1), None).flatMap { (te, ty) =>
-                checkModule(next, ModElem(name, te, mode) :: module, IntElem(name, ty, mode) :: interface, g, i, c)
-            }
+    def checkModule(fields: List[ModElem], module: List[ModElem], interface: List[IntElem], g: G, i: I, c: C)(using Logger): Result[TypeError, (Module, Interface)] = 
+        Logger.log(s"check module -- $fields, $module, $interface", Level.Trace)
+        fields match
+            case Nil => Result.Success(Module(module.reverse, this.meta), Interface(interface.reverse, this.meta))
+            case ModElem(name, term, mode) :: next => 
+                val expContext = (g >> 1) + (0 -> (Interface(interface, this.meta) >> 1))
+                val impContext = (i >> 1) ++ interface.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.meta), name, this.meta)) }.toMap.tag(0, Module(module, this.meta) >> 1)
+                val taggedTerm = term.tag(0, Module(module, this.meta) >> 1)
+                taggedTerm.transform(expContext, impContext, put(c, "this")(1), None).flatMap { (te, ty) =>
+                    checkModule(next, ModElem(name, te, mode) :: module, IntElem(name, ty, mode) :: interface, g, i, c)
+                }
 
     /** helper of [[transform]] for checking interfaces */
-    def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, i: I, c: C): Result[TypeError, (Interface, Term.Typ)] = fields match
-        case Nil => Result.Success(Interface(checked.reverse, this.meta), Typ(this.meta))
-        case IntElem(name, typ, mode) :: next =>
-            val expContext = (g >> 1) + (0 -> (Interface(fields ++ checked, this.meta)))
-            val impContext =  (i >> 1) ++ checked.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.meta), name, this.meta)) }
-            typ.transform(expContext, impContext, put(c, "this")(1), Some(Typ(this.meta))).flatMap { (ty, _) => 
-                checkInterface(next, IntElem(name, ty, mode) :: checked, g, i, c)
-            }
+    def checkInterface(fields: List[IntElem], checked: List[IntElem], g: G, i: I, c: C)(using Logger): Result[TypeError, (Interface, Term.Typ)] = 
+        Logger.log(s"check interface -- $fields, $checked", Level.Trace)
+        fields match
+            case Nil => Result.Success(Interface(checked.reverse, this.meta), Typ(this.meta))
+            case IntElem(name, typ, mode) :: next =>
+                val expContext = (g >> 1) + (0 -> (Interface(fields ++ checked, this.meta)))
+                val impContext =  (i >> 1) ++ checked.collect { case IntElem(name, typ, Mode.Imp) => (typ, Get(Var(0, None, this.meta), name, this.meta)) }
+                typ.transform(expContext, impContext, put(c, "this")(1), Some(Typ(this.meta))).flatMap { (ty, _) => 
+                    checkInterface(next, IntElem(name, ty, mode) :: checked, g, i, c)
+                }
 
     /** alias for [[transform transform(Map.empty, Map.empty, None)]] */
-    def typeCheck = transform(Map.empty, Map.empty, Map.empty, None)
+    def typeCheck(using Logger) = transform(Map.empty, Map.empty, Map.empty, None)
 
     /** alias for [[transform transform(Map.empty, Map.empty, Some(ty))]] */
-    def typeCheck(ty: Term) = transform(Map.empty, Map.empty, Map.empty, Some(ty))
+    def typeCheck(ty: Term)(using Logger) = transform(Map.empty, Map.empty, Map.empty, Some(ty))
 
 }

@@ -8,14 +8,17 @@ import Logger.{Level}
 
 object Logger {
     enum Level {
-        case Debug, Info, Warn, Error, Fatal
+        case Trace, Debug, Info, Warn, Error, Fatal
     }
 
-    def default = new Logger(Level.values.toSet, Map(Level.Debug -> Color.Blue, Level.Info -> Color.White, Level.Warn -> Color.Yellow, Level.Error -> Color.Red, Level.Fatal -> Color.LightRed))
-
+    def default = new Logger(Level.values.toSet - Level.Trace, Map(Level.Trace -> Color.Blue, Level.Debug -> Color.White, Level.Info -> Color.Green, Level.Warn -> Color.Yellow, Level.Error -> Color.Red, Level.Fatal -> Color.LightRed))
+    def log(msg: String, lvl: Level)(using name: sourcecode.FullName, line: sourcecode.Line, logger: Logger): Unit = logger.log(msg, lvl)
+    def log(msg: String)(using name: sourcecode.FullName, line: sourcecode.Line, logger: Logger): Unit = logger.log(msg)
 }
 
 class Logger(val levels: Set[Level], val colors: Map[Level, EscapeAttr]) {
+
+    def set(lvl: Level) = new Logger(Level.values.filter(_.ordinal >= lvl.ordinal).toSet, colors)
 
     def log(msg: String, lvl: Level)(using name: sourcecode.FullName, line: sourcecode.Line): Unit = 
         if levels.contains(lvl) then
