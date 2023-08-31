@@ -2,7 +2,6 @@ package pneuma.proto
 
 import Program.{ModElem, IntElem, Mode}
 import general.*
-import generation.Counter
 
 object Program {
     enum Mode { case Exp, Imp }

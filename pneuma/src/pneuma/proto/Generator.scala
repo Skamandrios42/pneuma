@@ -1,14 +1,8 @@
 package pneuma.proto
 
+import org.objectweb.asm.{ClassWriter, MethodVisitor, Handle, Label}
 import org.objectweb.asm.Opcodes.*
-import generation.defineClass
-import generation.defineMethod
-import generation.mkLambda
-import org.objectweb.asm.ClassWriter
-import org.objectweb.asm.MethodVisitor
-import org.objectweb.asm.Handle
-import org.objectweb.asm.Label
-import generation.Counter
+import generation.Utils.{Counter, defineClass, defineMethod, mkLambda}
 
 object Generator {
     def bytecode(name: String, term: Term) =
